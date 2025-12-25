@@ -1,0 +1,14 @@
+# 串口助手依赖项
+# Python 版本: 3.7+
+
+# PyQt5 - GUI框架
+PyQt5>=5.15.0
+
+# qt-material - Material Design主题
+qt-material>=2.14
+
+# pyserial - 串口通信库
+pyserial>=3.5
+
+# Nuitka - 打包工具（可选，仅用于编译打包）
+nuitka>=1.5.0
