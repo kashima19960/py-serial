@@ -68,8 +68,8 @@ class MainWindow(QMainWindow):
     def _init_ui(self):
         """初始化界面布局（移植自 Form1.Designer.cs）"""
         self.setWindowTitle('串口助手 V1.1 (PyQt5)')
-        self.resize(700, 450)
-        self.setMinimumSize(600, 400)
+        self.resize(800, 500)
+        self.setMinimumSize(750, 450)
         
         # 设置字体
         font = QFont('Microsoft YaHei', 9)
@@ -108,7 +108,7 @@ class MainWindow(QMainWindow):
         receive_btn_layout = QHBoxLayout()
         receive_btn_layout.addStretch()
         self.btn_clear_receive = QPushButton('清空接收区')
-        self.btn_clear_receive.setFixedWidth(90)
+        self.btn_clear_receive.setMinimumWidth(110)
         receive_btn_layout.addWidget(self.btn_clear_receive)
         receive_layout.addLayout(receive_btn_layout)
         
@@ -127,10 +127,10 @@ class MainWindow(QMainWindow):
         send_btn_layout = QHBoxLayout()
         send_btn_layout.addStretch()
         self.btn_clear_send = QPushButton('清空发送区')
-        self.btn_clear_send.setFixedWidth(90)
+        self.btn_clear_send.setMinimumWidth(110)
         send_btn_layout.addWidget(self.btn_clear_send)
         self.btn_send = QPushButton('发送')
-        self.btn_send.setFixedWidth(80)
+        self.btn_send.setMinimumWidth(80)
         self.btn_send.setEnabled(False)
         send_btn_layout.addWidget(self.btn_send)
         send_layout.addLayout(send_btn_layout)
@@ -141,7 +141,7 @@ class MainWindow(QMainWindow):
         
         # ===== 右侧面板（配置区）=====
         right_panel = QWidget()
-        right_panel.setFixedWidth(200)
+        right_panel.setFixedWidth(220)
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(6)
@@ -154,32 +154,37 @@ class MainWindow(QMainWindow):
         # 串口号
         port_layout.addWidget(QLabel('串口号'), 0, 0)
         self.cb_port_name = QComboBox()
-        self.cb_port_name.setMinimumWidth(110)
+        self.cb_port_name.setMinimumWidth(130)
+        self.cb_port_name.setFont(QFont('Microsoft YaHei', 9))
         port_layout.addWidget(self.cb_port_name, 0, 1)
         
         # 波特率
         port_layout.addWidget(QLabel('波特率'), 1, 0)
         self.cb_baud_rate = QComboBox()
-        self.cb_baud_rate.setEditable(True)
-        self.cb_baud_rate.addItems(['4800', '9600', '38400', '115200'])
+        self.cb_baud_rate.addItems(['300', '600', '1200', '2400', '4800', '9600', '14400', '19200', '38400', '43000', '56000', '57600', '115200', '128000', '256000'])
+        self.cb_baud_rate.setFont(QFont('Microsoft YaHei', 9))
+        self.cb_baud_rate.setMinimumWidth(130)
         port_layout.addWidget(self.cb_baud_rate, 1, 1)
         
         # 数据位
         port_layout.addWidget(QLabel('数据位'), 2, 0)
         self.cb_data_bits = QComboBox()
         self.cb_data_bits.addItems(['5', '6', '7', '8'])
+        self.cb_data_bits.setFont(QFont('Microsoft YaHei', 9))
         port_layout.addWidget(self.cb_data_bits, 2, 1)
         
         # 停止位
         port_layout.addWidget(QLabel('停止位'), 3, 0)
         self.cb_stop_bits = QComboBox()
         self.cb_stop_bits.addItems(['1', '1.5', '2'])
+        self.cb_stop_bits.setFont(QFont('Microsoft YaHei', 9))
         port_layout.addWidget(self.cb_stop_bits, 3, 1)
         
         # 校验位
         port_layout.addWidget(QLabel('校验位'), 4, 0)
         self.cb_parity = QComboBox()
         self.cb_parity.addItems(['无', '奇校验', '偶校验'])
+        self.cb_parity.setFont(QFont('Microsoft YaHei', 9))
         port_layout.addWidget(self.cb_parity, 4, 1)
         
         # 打开/关闭按钮
@@ -198,12 +203,16 @@ class MainWindow(QMainWindow):
         receive_config_layout.addWidget(QLabel('接收模式'), 0, 0)
         self.cb_receive_mode = QComboBox()
         self.cb_receive_mode.addItems(['HEX模式', '文本模式'])
+        self.cb_receive_mode.setFont(QFont('Microsoft YaHei', 9))
+        self.cb_receive_mode.setMinimumWidth(130)
         receive_config_layout.addWidget(self.cb_receive_mode, 0, 1)
         
         receive_config_layout.addWidget(QLabel('文本编码'), 1, 0)
         self.cb_receive_coding = QComboBox()
         self.cb_receive_coding.addItems(['GBK', 'UTF-8'])
         self.cb_receive_coding.setEnabled(False)
+        self.cb_receive_coding.setFont(QFont('Microsoft YaHei', 9))
+        self.cb_receive_coding.setMinimumWidth(130)
         receive_config_layout.addWidget(self.cb_receive_coding, 1, 1)
         
         right_layout.addWidget(receive_config_group)
@@ -216,12 +225,16 @@ class MainWindow(QMainWindow):
         send_config_layout.addWidget(QLabel('发送模式'), 0, 0)
         self.cb_send_mode = QComboBox()
         self.cb_send_mode.addItems(['HEX模式', '文本模式'])
+        self.cb_send_mode.setFont(QFont('Microsoft YaHei', 9))
+        self.cb_send_mode.setMinimumWidth(130)
         send_config_layout.addWidget(self.cb_send_mode, 0, 1)
         
         send_config_layout.addWidget(QLabel('文本编码'), 1, 0)
         self.cb_send_coding = QComboBox()
         self.cb_send_coding.addItems(['GBK', 'UTF-8'])
         self.cb_send_coding.setEnabled(False)
+        self.cb_send_coding.setFont(QFont('Microsoft YaHei', 9))
+        self.cb_send_coding.setMinimumWidth(130)
         send_config_layout.addWidget(self.cb_send_coding, 1, 1)
         
         right_layout.addWidget(send_config_group)
@@ -254,7 +267,7 @@ class MainWindow(QMainWindow):
     
     def _init_default_values(self):
         """初始化控件默认值（移植自 Form1_Load）"""
-        self.cb_baud_rate.setCurrentIndex(1)  # 9600
+        self.cb_baud_rate.setCurrentIndex(5)  # 9600
         self.cb_data_bits.setCurrentIndex(3)  # 8
         self.cb_stop_bits.setCurrentIndex(0)  # 1
         self.cb_parity.setCurrentIndex(0)     # 无

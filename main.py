@@ -7,8 +7,10 @@ PyQt5 + qt_material 实现的串口调试工具
 """
 
 import sys
+import os
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
 
 # 应用 Material Design 主题
 from qt_material import apply_stylesheet
@@ -24,6 +26,11 @@ def main():
     
     # 创建应用
     app = QApplication(sys.argv)
+    
+    # 设置应用程序图标
+    icon_path = os.path.join(os.path.dirname(__file__), 'icon.ico')
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
     
     # 应用 Material Design 主题
     # 可选主题: dark_teal, dark_cyan, dark_amber, dark_pink, 
