@@ -23,11 +23,11 @@ py-serial/
 
 ## 技术栈
 
-- **语言**: Python 3.8.10
-- **GUI 框架**: PyQt5
-- **串口库**: pyserial
-- **UI 美化**: qt_material
-- **打包工具**: Nuitka
+- 语言: Python 3.8.10
+- GUI 框架: PyQt5
+- 串口库: pyserial
+- UI 美化: qt_material
+- 打包工具: Nuitka
 
 ## 功能特性
 

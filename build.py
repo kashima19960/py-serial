@@ -21,6 +21,7 @@ def build():
         sys.executable, '-m', 'nuitka',
         '--standalone',                    # 独立打包
         '--onefile',                       # 单文件模式
+        '--msvc=latest',                   # 使用最新的 MSVC 编译器
         '--enable-plugin=pyqt5',           # PyQt5 插件
         '--windows-disable-console',       # Windows 下禁用控制台
         '--windows-icon-from-ico=icon.ico' if os.path.exists('icon.ico') else '',
