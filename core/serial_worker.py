@@ -8,7 +8,7 @@
 from typing import Optional
 import serial
 from serial.tools import list_ports
-from PyQt5.QtCore import QThread, pyqtSignal, QMutex
+from PySide6.QtCore import QThread, Signal, QMutex
 
 
 class SerialWorker(QThread):
@@ -25,9 +25,9 @@ class SerialWorker(QThread):
     """
     
     # 定义信号
-    data_received = pyqtSignal(bytes)  # 数据接收信号
-    error_occurred = pyqtSignal(str)   # 错误信号
-    port_disconnected = pyqtSignal()   # 串口断开信号
+    data_received = Signal(bytes)  # 数据接收信号
+    error_occurred = Signal(str)   # 错误信号
+    port_disconnected = Signal()   # 串口断开信号
     
     def __init__(self, parent=None):
         super().__init__(parent)

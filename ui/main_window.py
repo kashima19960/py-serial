@@ -9,13 +9,13 @@
 import ctypes
 from typing import Optional
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QGroupBox, QTextEdit, QLineEdit, QPushButton, QComboBox,
     QLabel, QSplitter, QMessageBox, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QFont
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont, QTextCursor
 
 from core.serial_worker import SerialWorker, get_available_ports
 from core.encoding_handler import (
@@ -47,13 +47,13 @@ class MainWindow(QMainWindow):
         self._serial_worker.port_disconnected.connect(self._on_port_disconnected)
         
         # 初始化编码处理器
-        self._encoding_handler = EncodingHandler('gbk')
+        self._encoding_handler = EncodingHandler('utf-8')
         
         # 模式和编码状态（移植自 C#）
-        self._receive_mode = 'HEX模式'
-        self._receive_coding = 'GBK'
-        self._send_mode = 'HEX模式'
-        self._send_coding = 'GBK'
+        self._receive_mode = '文本模式'
+        self._receive_coding = 'UTF-8'
+        self._send_mode = '文本模式'
+        self._send_coding = 'UTF-8'
         
         # 初始化 UI
         self._init_ui()
@@ -68,8 +68,8 @@ class MainWindow(QMainWindow):
     def _init_ui(self):
         """初始化界面布局（移植自 Form1.Designer.cs）"""
         self.setWindowTitle('串口助手 V1.1 (PyQt5)')
-        self.resize(800, 500)
-        self.setMinimumSize(750, 450)
+        self.resize(1024, 720)
+        self.setMinimumSize(800, 600)
         
         # 设置字体
         font = QFont('Microsoft YaHei', 9)
@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
         self.tb_receive = QTextEdit()
         self.tb_receive.setReadOnly(True)
         self.tb_receive.setFont(QFont('Consolas', 10))
-        self.tb_receive.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.tb_receive.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         receive_layout.addWidget(self.tb_receive, 1)
         
         # 接收区按钮行
@@ -267,14 +267,14 @@ class MainWindow(QMainWindow):
     
     def _init_default_values(self):
         """初始化控件默认值（移植自 Form1_Load）"""
-        self.cb_baud_rate.setCurrentIndex(5)  # 9600
+        self.cb_baud_rate.setCurrentIndex(12)  # 115200
         self.cb_data_bits.setCurrentIndex(3)  # 8
         self.cb_stop_bits.setCurrentIndex(0)  # 1
         self.cb_parity.setCurrentIndex(0)     # 无
-        self.cb_receive_mode.setCurrentIndex(0)  # HEX模式
-        self.cb_receive_coding.setCurrentIndex(0)  # GBK
-        self.cb_send_mode.setCurrentIndex(0)  # HEX模式
-        self.cb_send_coding.setCurrentIndex(0)  # GBK
+        self.cb_receive_mode.setCurrentIndex(1)  # 文本模式
+        self.cb_receive_coding.setCurrentIndex(1)  # UTF-8
+        self.cb_send_mode.setCurrentIndex(1)  # 文本模式
+        self.cb_send_coding.setCurrentIndex(1)  # UTF-8
         
         # 刷新串口列表
         self._refresh_port_list()
@@ -398,9 +398,9 @@ class MainWindow(QMainWindow):
             text = self._encoding_handler.decode(data)
         
         # 追加文本并滚动到底部
-        self.tb_receive.moveCursor(self.tb_receive.textCursor().End)
+        self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
         self.tb_receive.insertPlainText(text)
-        self.tb_receive.moveCursor(self.tb_receive.textCursor().End)
+        self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
     
     def _on_error(self, message: str):
         """处理错误"""
@@ -459,7 +459,7 @@ class MainWindow(QMainWindow):
         """
         try:
             if event_type == b'windows_generic_MSG':
-                msg = ctypes.wintypes.MSG.from_address(message.__int__())
+                msg = ctypes.wintypes.MSG.from_address(int(message))
                 if msg.message == WM_DEVICECHANGE:
                     if msg.wParam == DBT_DEVICEREMOVECOMPLETE:
                         # 设备移除，检查串口状态

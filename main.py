@@ -8,9 +8,9 @@ PyQt5 + qt_material 实现的串口调试工具
 
 import sys
 import os
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 
 # 应用 Material Design 主题
 from qt_material import apply_stylesheet
@@ -20,9 +20,7 @@ from ui.main_window import MainWindow
 
 def main():
     """主函数"""
-    # 高 DPI 支持
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    # Qt6 默认开启高 DPI 支持，无需手动设置
     
     # 创建应用
     app = QApplication(sys.argv)
@@ -56,7 +54,7 @@ def main():
     window.show()
     
     # 运行应用
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == '__main__':

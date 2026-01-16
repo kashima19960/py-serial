@@ -1,8 +1,8 @@
 # 串口助手依赖项
 # Python 版本: 3.7+
 
-# PyQt5 - GUI框架
-PyQt5>=5.15.0
+# PySide6 - GUI框架
+PySide6>=6.0.0
 
 # qt-material - Material Design主题
 qt-material>=2.14
