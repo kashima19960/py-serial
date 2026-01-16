@@ -67,7 +67,7 @@ class MainWindow(QMainWindow):
     
     def _init_ui(self):
         """初始化界面布局（移植自 Form1.Designer.cs）"""
-        self.setWindowTitle('串口助手 V1.1 (PyQt5)')
+        self.setWindowTitle('串口助手 V1.1 (PySide6)')
         self.resize(1024, 720)
         self.setMinimumSize(800, 600)
         
@@ -102,6 +102,8 @@ class MainWindow(QMainWindow):
         self.tb_receive.setReadOnly(True)
         self.tb_receive.setFont(QFont('Consolas', 10))
         self.tb_receive.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.tb_receive.setAcceptRichText(False)
+        self.tb_receive.setPlaceholderText('等待接收数据…')
         receive_layout.addWidget(self.tb_receive, 1)
         
         # 接收区按钮行
@@ -109,6 +111,8 @@ class MainWindow(QMainWindow):
         receive_btn_layout.addStretch()
         self.btn_clear_receive = QPushButton('清空接收区')
         self.btn_clear_receive.setMinimumWidth(110)
+        self.btn_clear_receive.setProperty('muted', True)
+        self.btn_clear_receive.setCursor(Qt.PointingHandCursor)
         receive_btn_layout.addWidget(self.btn_clear_receive)
         receive_layout.addLayout(receive_btn_layout)
         
@@ -121,6 +125,9 @@ class MainWindow(QMainWindow):
         self.tb_send = QTextEdit()
         self.tb_send.setFont(QFont('Consolas', 10))
         self.tb_send.setMaximumHeight(80)
+        self.tb_send.setAcceptRichText(False)
+        self.tb_send.setTabChangesFocus(True)
+        self.tb_send.setPlaceholderText('请输入要发送的内容（HEX 或文本）…')
         send_layout.addWidget(self.tb_send, 1)
         
         # 发送区按钮行
@@ -128,10 +135,14 @@ class MainWindow(QMainWindow):
         send_btn_layout.addStretch()
         self.btn_clear_send = QPushButton('清空发送区')
         self.btn_clear_send.setMinimumWidth(110)
+        self.btn_clear_send.setProperty('muted', True)
+        self.btn_clear_send.setCursor(Qt.PointingHandCursor)
         send_btn_layout.addWidget(self.btn_clear_send)
         self.btn_send = QPushButton('发送')
         self.btn_send.setMinimumWidth(80)
         self.btn_send.setEnabled(False)
+        self.btn_send.setProperty('primary', True)
+        self.btn_send.setCursor(Qt.PointingHandCursor)
         send_btn_layout.addWidget(self.btn_send)
         send_layout.addLayout(send_btn_layout)
         
@@ -141,7 +152,7 @@ class MainWindow(QMainWindow):
         
         # ===== 右侧面板（配置区）=====
         right_panel = QWidget()
-        right_panel.setFixedWidth(220)
+        right_panel.setFixedWidth(240)
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(6)
@@ -191,7 +202,15 @@ class MainWindow(QMainWindow):
         port_layout.addWidget(QLabel('操作'), 5, 0)
         self.btn_open = QPushButton('打开串口')
         self.btn_open.setObjectName('btn_open')
+        self.btn_open.setProperty('primary', True)
+        self.btn_open.setCursor(Qt.PointingHandCursor)
         port_layout.addWidget(self.btn_open, 5, 1)
+
+        # 串口状态徽标
+        self.lbl_port_status = QLabel('未连接')
+        self.lbl_port_status.setObjectName('port_status')
+        self.lbl_port_status.setAlignment(Qt.AlignCenter)
+        port_layout.addWidget(self.lbl_port_status, 6, 0, 1, 2)
         
         right_layout.addWidget(port_group)
         
@@ -247,6 +266,13 @@ class MainWindow(QMainWindow):
         # 设置分割比例
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
+
+        # 状态栏
+        self.statusBar().setSizeGripEnabled(False)
+        self.statusBar().showMessage('就绪')
+
+        # 应用统一样式
+        self._apply_style()
     
     def _init_connections(self):
         """初始化信号槽连接"""
@@ -278,6 +304,173 @@ class MainWindow(QMainWindow):
         
         # 刷新串口列表
         self._refresh_port_list()
+
+        # 初始化串口状态样式
+        self._update_port_ui(False)
+
+    def _apply_style(self):
+        """应用统一样式"""
+        self.setStyleSheet(
+            """
+            QMainWindow {
+                background-color: #0F172A;
+            }
+            QWidget {
+                color: #E2E8F0;
+                font-family: "Microsoft YaHei UI", "Segoe UI", "Microsoft YaHei";
+                font-size: 12px;
+            }
+            QGroupBox {
+                background-color: #111827;
+                border: 1px solid #334155;
+                border-radius: 10px;
+                margin-top: 14px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 6px;
+                color: #E2E8F0;
+                font-weight: 600;
+            }
+            QTextEdit, QLineEdit {
+                background-color: #0B1220;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 6px;
+                selection-background-color: #2563EB;
+                selection-color: #F8FAFC;
+            }
+            QTextEdit:focus, QLineEdit:focus, QComboBox:focus {
+                border: 1px solid #60A5FA;
+            }
+            QComboBox {
+                background-color: #0B1220;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 4px 8px;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 22px;
+                border-left: 1px solid #334155;
+            }
+            QPushButton {
+                background-color: #1E293B;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 6px 12px;
+                color: #E2E8F0;
+            }
+            QPushButton:hover {
+                background-color: #22324A;
+                border-color: #475569;
+            }
+            QPushButton:pressed {
+                background-color: #0B1220;
+            }
+            QPushButton:disabled {
+                color: #64748B;
+                background-color: #0F172A;
+                border-color: #1F2937;
+            }
+            QPushButton[primary="true"] {
+                background-color: #2563EB;
+                border-color: #2563EB;
+            }
+            QPushButton[primary="true"]:hover {
+                background-color: #1D4ED8;
+            }
+            QPushButton[danger="true"] {
+                background-color: #F97316;
+                border-color: #F97316;
+                color: #0B1220;
+            }
+            QPushButton[danger="true"]:hover {
+                background-color: #EA580C;
+                border-color: #EA580C;
+            }
+            QPushButton[muted="true"] {
+                background-color: #0B1220;
+                border-color: #334155;
+                color: #CBD5E1;
+            }
+            QLabel#port_status {
+                padding: 4px 8px;
+                border-radius: 999px;
+                border: 1px solid #1F2937;
+                background-color: #0B1220;
+                color: #94A3B8;
+            }
+            QLabel#port_status[status="open"] {
+                color: #22C55E;
+                border-color: #14532D;
+                background-color: #052E1A;
+            }
+            QLabel#port_status[status="closed"] {
+                color: #94A3B8;
+                border-color: #1F2937;
+                background-color: #0B1220;
+            }
+            QLabel#port_status[status="error"] {
+                color: #F97316;
+                border-color: #7C2D12;
+                background-color: #1F1207;
+            }
+            QSplitter::handle {
+                background-color: #0B1220;
+            }
+            QScrollBar:vertical {
+                background: #0B1220;
+                width: 10px;
+                margin: 2px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #334155;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #475569;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+            """
+        )
+
+    def _set_status_badge(self, status: str, text: str):
+        """更新串口状态徽标"""
+        self.lbl_port_status.setProperty('status', status)
+        self.lbl_port_status.setText(text)
+        self.lbl_port_status.style().unpolish(self.lbl_port_status)
+        self.lbl_port_status.style().polish(self.lbl_port_status)
+        self.lbl_port_status.update()
+
+    def _update_port_ui(self, is_open: bool):
+        """同步串口打开/关闭时的 UI 状态"""
+        if is_open:
+            self.btn_open.setText('关闭串口')
+            self.btn_open.setProperty('danger', True)
+            self.btn_open.setProperty('primary', False)
+            self.btn_send.setEnabled(True)
+            self._set_config_enabled(False)
+            self._set_status_badge('open', '已连接')
+            self.statusBar().showMessage(f'已连接 {self.cb_port_name.currentText()}')
+        else:
+            self.btn_open.setText('打开串口')
+            self.btn_open.setProperty('danger', False)
+            self.btn_open.setProperty('primary', True)
+            self.btn_send.setEnabled(False)
+            self._set_config_enabled(True)
+            self._set_status_badge('closed', '未连接')
+            self.statusBar().showMessage('未连接')
+
+        self.btn_open.style().unpolish(self.btn_open)
+        self.btn_open.style().polish(self.btn_open)
+        self.btn_open.update()
     
     def _refresh_port_list(self):
         """刷新可用串口列表"""
@@ -324,10 +517,7 @@ class MainWindow(QMainWindow):
             self._serial_worker.start()
             
             # 更新 UI 状态
-            self.btn_open.setText('关闭串口')
-            self.btn_open.setStyleSheet('background-color: #ffb6c1;')
-            self.btn_send.setEnabled(True)
-            self._set_config_enabled(False)
+            self._update_port_ui(True)
             return True
         else:
             QMessageBox.warning(self, '提示', '串口打开失败')
@@ -341,10 +531,7 @@ class MainWindow(QMainWindow):
         self._encoding_handler.reset()
         
         # 更新 UI 状态
-        self.btn_open.setText('打开串口')
-        self.btn_open.setStyleSheet('')
-        self.btn_send.setEnabled(False)
-        self._set_config_enabled(True)
+        self._update_port_ui(False)
     
     def _set_config_enabled(self, enabled: bool):
         """设置配置控件的启用状态"""
@@ -404,11 +591,13 @@ class MainWindow(QMainWindow):
     
     def _on_error(self, message: str):
         """处理错误"""
+        self._set_status_badge('error', '错误')
         QMessageBox.warning(self, '错误', message)
     
     def _on_port_disconnected(self):
         """串口断开连接处理"""
         self._close_serial_port()
+        self._set_status_badge('error', '已断开')
         QMessageBox.warning(self, '提示', '串口已断开')
     
     def _on_receive_mode_changed(self, index: int):
