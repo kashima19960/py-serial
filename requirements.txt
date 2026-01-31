@@ -1,14 +1,11 @@
-# 串口助手依赖项
-# Python 版本: 3.7+
+# Serial Assistant Dependencies
+# Python version: 3.8+
 
-# PySide6 - GUI框架
+# PySide6 - Modern Qt6 GUI framework
 PySide6>=6.0.0
 
-# qt-material - Material Design主题
-qt-material>=2.14
-
-# pyserial - 串口通信库
+# pyserial - Serial port communication library
 pyserial>=3.5
 
-# Nuitka - 打包工具（可选，仅用于编译打包）
+# Nuitka - Compilation and packaging tool (optional, for building)
 nuitka>=1.5.0

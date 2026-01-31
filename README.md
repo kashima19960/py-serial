@@ -1,87 +1,94 @@
-# 串口助手 (PyQt5 版本)
+# Serial Assistant (PySide6 Edition)
 
-移植自江协科技 C# WinForms 串口助手，使用 PyQt5 + qt_material 实现。
+A modern, lightweight serial debugging tool built with PySide6.
+Ported from the Jiangxie Technology C# WinForms Serial Assistant.
 
-## 项目结构
+## Project Structure
 
 ```
 py-serial/
-├── main.py                           # 主入口文件
-├── build.py                          # Nuitka 打包脚本
-├── README.md                         # 项目说明
-├── serial_assistant/                 # 主程序包
+├── main.py                 # Application entry point
+├── build.py                # Nuitka build script
+├── README.md               # Project documentation
+├── requirements.txt        # Python dependencies
+├── core/                   # Core functionality modules
 │   ├── __init__.py
-│   ├── core/                         # 核心功能模块
-│   │   ├── __init__.py
-│   │   ├── serial_worker.py          # 串口工作线程
-│   │   └── encoding_handler.py       # 编码处理器
-│   └── ui/                           # 用户界面模块
-│       ├── __init__.py
-│       └── main_window.py            # 主窗口
-└── CSharpFile/                       # 原 C# 源码 (参考)
+│   ├── serial_worker.py    # Serial port worker thread
+│   └── encoding_handler.py # Encoding utilities
+└── ui/                     # User interface modules
+    ├── __init__.py
+    ├── main_window.py      # Main application window
+    └── styles.py           # UI theme and styles
 ```
 
-## 技术栈
+## Tech Stack
 
-- 语言: Python 3.8.10
-- GUI 框架: PyQt5
-- 串口库: pyserial
-- UI 美化: qt_material
-- 打包工具: Nuitka
+- **Language:** Python 3.8+
+- **GUI Framework:** PySide6 (Qt6)
+- **Serial Library:** pyserial
+- **Build Tool:** Nuitka
 
-## 功能特性
+## Features
 
-### 界面布局
+### User Interface
 
-- 左右分割结构，左侧为接收/发送区，右侧为配置区
-- Material Design 风格主题
+- Modern light theme with clean, professional design
+- Left-right split layout: receive/send areas on left, configuration on right
+- Responsive and accessible interface
 
-### 串口功能
+### Serial Port Functions
 
-- ✅ 自动扫描可用串口 (点击下拉框时刷新)
-- ✅ 支持配置: 波特率、数据位、停止位、校验位
-- ✅ 多线程接收 (QThread + pyqtSignal)
-- ✅ USB 热拔插检测
+- ✅ Auto-scan available serial ports (refresh on dropdown)
+- ✅ Configurable: baud rate, data bits, stop bits, parity
+- ✅ Multi-threaded reception (QThread + Signal)
+- ✅ USB hot-plug detection
 
-### 数据处理
+### Data Processing
 
-- ✅ HEX/文本模式切换 (接收/发送)
-- ✅ GBK/UTF-8 编码支持
-- ✅ 使用 codecs 增量解码器处理断包问题
+- ✅ HEX/Text mode switching (receive/send)
+- ✅ GBK/UTF-8 encoding support
+- ✅ Incremental decoder for handling packet fragmentation
 
-## 运行方式
+## Quick Start
+
+### Running the Application
 
 ```bash
-# 直接运行
 python main.py
 ```
 
-## 打包方式
+### Building Executable
 
 ```bash
-# 使用 Nuitka 打包
 python build.py
-
-# 或者手动执行
-python -m nuitka --standalone --onefile --enable-plugin=pyqt5 --windows-disable-console main.py
 ```
 
-## 依赖安装
+Or manually:
 
 ```bash
-pip install PyQt5 pyserial qt-material nuitka
+python -m nuitka --standalone --onefile --enable-plugin=pyside6 \
+    --windows-disable-console main.py
 ```
 
-## 移植说明
+### Installing Dependencies
 
-| C# 原版                   | Python 实现                       |
-| ------------------------- | --------------------------------- |
-| `SerialPort` 类         | `pyserial` 库                   |
-| `DataReceived` 事件     | `QThread` + `pyqtSignal`      |
-| `DefWndProc` 消息处理   | `nativeEvent` + 定时器检测      |
-| `BytesToText` 断包处理  | `codecs.IncrementalDecoder`     |
-| `TableLayoutPanel` 布局 | `QGridLayout` + `QHBoxLayout` |
+```bash
+pip install -r requirements.txt
+```
 
-## 版本历史
+## Implementation Notes
 
-- **v1.1.0** - PyQt5 移植版本
+| C# Original                | Python Implementation        |
+| -------------------------- | ---------------------------- |
+| `SerialPort` class         | `pyserial` library           |
+| `DataReceived` event       | `QThread` + `Signal`         |
+| `DefWndProc` message       | `nativeEvent` + timer        |
+| `BytesToText` fragmentation| `codecs.IncrementalDecoder`  |
+| `TableLayoutPanel` layout  | `QGridLayout` + `QHBoxLayout`|
+
+## Version History
+
+- **v1.2.0** - Modern UI redesign with light theme
+- **v1.1.0** - PySide6 port from PyQt5
+- **v1.0.0** - Initial Python port from C#
+

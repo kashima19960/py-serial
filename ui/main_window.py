@@ -1,672 +1,665 @@
 # -*- coding: utf-8 -*-
-"""
-主窗口模块
+# Copyright 2024 Serial Assistant Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-移植自 C# WinForms Form1，实现左右布局的串口助手界面。
-包含接收区、发送区和配置区。
+"""Main Window Module.
+
+Contains the MainWindow class which implements the primary user interface
+for the Serial Assistant application.
 """
 
 import ctypes
 from typing import Optional
 
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QGroupBox, QTextEdit, QLineEdit, QPushButton, QComboBox,
-    QLabel, QSplitter, QMessageBox, QSizePolicy
-)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QTextCursor
-
-from core.serial_worker import SerialWorker, get_available_ports
-from core.encoding_handler import (
-    EncodingHandler, bytes_to_hex, hex_to_bytes, text_to_bytes
+from PySide6.QtWidgets import (
+    QComboBox,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
+from core.encoding_handler import (
+    EncodingHandler,
+    bytes_to_hex,
+    hex_to_bytes,
+    text_to_bytes,
+)
+from core.serial_worker import SerialWorker, get_available_ports
+from ui.styles import get_stylesheet
 
-# Windows 消息常量
+
+# Windows message constants for device detection.
 WM_DEVICECHANGE = 0x0219
 DBT_DEVICEREMOVECOMPLETE = 0x8004
 
 
 class MainWindow(QMainWindow):
+    """Main window for the Serial Assistant application.
+
+    Implements a left-right split layout:
+        - Left side: Receive area (top) and Send area (bottom)
+        - Right side: Serial port configuration and settings
+
+    Attributes:
+        tb_receive: Text editor for displaying received data.
+        tb_send: Text editor for composing data to send.
+        btn_open: Button to open/close serial port.
+        btn_send: Button to send data.
     """
-    串口助手主窗口
-    
-    移植自 C# WinForms，采用左右布局：
-    - 左侧：接收区（上）和发送区（下）
-    - 右侧：串口配置、接收设置、发送设置
-    """
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
+        """Initialize the main window."""
         super().__init__()
-        
-        # 初始化串口工作线程
+
+        # Initialize serial worker.
         self._serial_worker = SerialWorker()
         self._serial_worker.data_received.connect(self._on_data_received)
         self._serial_worker.error_occurred.connect(self._on_error)
         self._serial_worker.port_disconnected.connect(self._on_port_disconnected)
-        
-        # 初始化编码处理器
-        self._encoding_handler = EncodingHandler('utf-8')
-        
-        # 模式和编码状态（移植自 C#）
-        self._receive_mode = '文本模式'
-        self._receive_coding = 'UTF-8'
-        self._send_mode = '文本模式'
-        self._send_coding = 'UTF-8'
-        
-        # 初始化 UI
+
+        # Initialize encoding handler.
+        self._encoding_handler = EncodingHandler("utf-8")
+
+        # Mode and encoding state.
+        self._receive_mode = "文本模式"
+        self._receive_encoding = "UTF-8"
+        self._send_mode = "文本模式"
+        self._send_encoding = "UTF-8"
+
+        # Build UI.
         self._init_ui()
         self._init_connections()
         self._init_default_values()
-        
-        # 定时器用于检测串口状态（备用方案）
+
+        # Timer for port status monitoring (fallback for hot-plug detection).
         self._check_timer = QTimer()
         self._check_timer.timeout.connect(self._check_port_status)
-        self._check_timer.start(1000)  # 每秒检查一次
-    
-    def _init_ui(self):
-        """初始化界面布局（移植自 Form1.Designer.cs）"""
-        self.setWindowTitle('串口助手 V1.1 (PySide6)')
+        self._check_timer.start(1000)
+
+    def _init_ui(self) -> None:
+        """Initialize the user interface layout."""
+        self.setWindowTitle("Serial Assistant v1.2")
         self.resize(1024, 720)
         self.setMinimumSize(800, 600)
-        
-        # 设置字体
-        font = QFont('Microsoft YaHei', 9)
-        self.setFont(font)
-        
-        # 创建中心部件
+
+        # Apply stylesheet.
+        self.setStyleSheet(get_stylesheet())
+
+        # Create central widget.
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
-        # 主布局：左右分割
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(6, 6, 6, 6)
-        main_layout.setSpacing(6)
-        
-        # 使用 QSplitter 实现可调整的左右分割
-        splitter = QSplitter(Qt.Horizontal)
-        main_layout.addWidget(splitter)
-        
-        # ===== 左侧面板（接收区 + 发送区）=====
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(6)
-        
-        # -- 接收区 GroupBox --
-        receive_group = QGroupBox('接收区')
-        receive_layout = QVBoxLayout(receive_group)
-        
-        self.tb_receive = QTextEdit()
-        self.tb_receive.setReadOnly(True)
-        self.tb_receive.setFont(QFont('Consolas', 10))
-        self.tb_receive.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        self.tb_receive.setAcceptRichText(False)
-        self.tb_receive.setPlaceholderText('等待接收数据…')
-        receive_layout.addWidget(self.tb_receive, 1)
-        
-        # 接收区按钮行
-        receive_btn_layout = QHBoxLayout()
-        receive_btn_layout.addStretch()
-        self.btn_clear_receive = QPushButton('清空接收区')
-        self.btn_clear_receive.setMinimumWidth(110)
-        self.btn_clear_receive.setProperty('muted', True)
-        self.btn_clear_receive.setCursor(Qt.PointingHandCursor)
-        receive_btn_layout.addWidget(self.btn_clear_receive)
-        receive_layout.addLayout(receive_btn_layout)
-        
-        left_layout.addWidget(receive_group, 2)
-        
-        # -- 发送区 GroupBox --
-        send_group = QGroupBox('发送区')
-        send_layout = QVBoxLayout(send_group)
-        
-        self.tb_send = QTextEdit()
-        self.tb_send.setFont(QFont('Consolas', 10))
-        self.tb_send.setMaximumHeight(80)
-        self.tb_send.setAcceptRichText(False)
-        self.tb_send.setTabChangesFocus(True)
-        self.tb_send.setPlaceholderText('请输入要发送的内容（HEX 或文本）…')
-        send_layout.addWidget(self.tb_send, 1)
-        
-        # 发送区按钮行
-        send_btn_layout = QHBoxLayout()
-        send_btn_layout.addStretch()
-        self.btn_clear_send = QPushButton('清空发送区')
-        self.btn_clear_send.setMinimumWidth(110)
-        self.btn_clear_send.setProperty('muted', True)
-        self.btn_clear_send.setCursor(Qt.PointingHandCursor)
-        send_btn_layout.addWidget(self.btn_clear_send)
-        self.btn_send = QPushButton('发送')
-        self.btn_send.setMinimumWidth(80)
-        self.btn_send.setEnabled(False)
-        self.btn_send.setProperty('primary', True)
-        self.btn_send.setCursor(Qt.PointingHandCursor)
-        send_btn_layout.addWidget(self.btn_send)
-        send_layout.addLayout(send_btn_layout)
-        
-        left_layout.addWidget(send_group, 1)
-        
-        splitter.addWidget(left_panel)
-        
-        # ===== 右侧面板（配置区）=====
-        right_panel = QWidget()
-        right_panel.setFixedWidth(240)
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(6)
-        
-        # -- 串口配置 GroupBox --
-        port_group = QGroupBox('串口配置')
-        port_layout = QGridLayout(port_group)
-        port_layout.setSpacing(8)
-        
-        # 串口号
-        port_layout.addWidget(QLabel('串口号'), 0, 0)
-        self.cb_port_name = QComboBox()
-        self.cb_port_name.setMinimumWidth(130)
-        self.cb_port_name.setFont(QFont('Microsoft YaHei', 9))
-        port_layout.addWidget(self.cb_port_name, 0, 1)
-        
-        # 波特率
-        port_layout.addWidget(QLabel('波特率'), 1, 0)
-        self.cb_baud_rate = QComboBox()
-        self.cb_baud_rate.addItems(['300', '600', '1200', '2400', '4800', '9600', '14400', '19200', '38400', '43000', '56000', '57600', '115200', '128000', '256000'])
-        self.cb_baud_rate.setFont(QFont('Microsoft YaHei', 9))
-        self.cb_baud_rate.setMinimumWidth(130)
-        port_layout.addWidget(self.cb_baud_rate, 1, 1)
-        
-        # 数据位
-        port_layout.addWidget(QLabel('数据位'), 2, 0)
-        self.cb_data_bits = QComboBox()
-        self.cb_data_bits.addItems(['5', '6', '7', '8'])
-        self.cb_data_bits.setFont(QFont('Microsoft YaHei', 9))
-        port_layout.addWidget(self.cb_data_bits, 2, 1)
-        
-        # 停止位
-        port_layout.addWidget(QLabel('停止位'), 3, 0)
-        self.cb_stop_bits = QComboBox()
-        self.cb_stop_bits.addItems(['1', '1.5', '2'])
-        self.cb_stop_bits.setFont(QFont('Microsoft YaHei', 9))
-        port_layout.addWidget(self.cb_stop_bits, 3, 1)
-        
-        # 校验位
-        port_layout.addWidget(QLabel('校验位'), 4, 0)
-        self.cb_parity = QComboBox()
-        self.cb_parity.addItems(['无', '奇校验', '偶校验'])
-        self.cb_parity.setFont(QFont('Microsoft YaHei', 9))
-        port_layout.addWidget(self.cb_parity, 4, 1)
-        
-        # 打开/关闭按钮
-        port_layout.addWidget(QLabel('操作'), 5, 0)
-        self.btn_open = QPushButton('打开串口')
-        self.btn_open.setObjectName('btn_open')
-        self.btn_open.setProperty('primary', True)
-        self.btn_open.setCursor(Qt.PointingHandCursor)
-        port_layout.addWidget(self.btn_open, 5, 1)
 
-        # 串口状态徽标
-        self.lbl_port_status = QLabel('未连接')
-        self.lbl_port_status.setObjectName('port_status')
-        self.lbl_port_status.setAlignment(Qt.AlignCenter)
-        port_layout.addWidget(self.lbl_port_status, 6, 0, 1, 2)
-        
-        right_layout.addWidget(port_group)
-        
-        # -- 接收区配置 GroupBox --
-        receive_config_group = QGroupBox('接收区配置')
-        receive_config_layout = QGridLayout(receive_config_group)
-        receive_config_layout.setSpacing(8)
-        
-        receive_config_layout.addWidget(QLabel('接收模式'), 0, 0)
-        self.cb_receive_mode = QComboBox()
-        self.cb_receive_mode.addItems(['HEX模式', '文本模式'])
-        self.cb_receive_mode.setFont(QFont('Microsoft YaHei', 9))
-        self.cb_receive_mode.setMinimumWidth(130)
-        receive_config_layout.addWidget(self.cb_receive_mode, 0, 1)
-        
-        receive_config_layout.addWidget(QLabel('文本编码'), 1, 0)
-        self.cb_receive_coding = QComboBox()
-        self.cb_receive_coding.addItems(['GBK', 'UTF-8'])
-        self.cb_receive_coding.setEnabled(False)
-        self.cb_receive_coding.setFont(QFont('Microsoft YaHei', 9))
-        self.cb_receive_coding.setMinimumWidth(130)
-        receive_config_layout.addWidget(self.cb_receive_coding, 1, 1)
-        
-        right_layout.addWidget(receive_config_group)
-        
-        # -- 发送区配置 GroupBox --
-        send_config_group = QGroupBox('发送区配置')
-        send_config_layout = QGridLayout(send_config_group)
-        send_config_layout.setSpacing(8)
-        
-        send_config_layout.addWidget(QLabel('发送模式'), 0, 0)
-        self.cb_send_mode = QComboBox()
-        self.cb_send_mode.addItems(['HEX模式', '文本模式'])
-        self.cb_send_mode.setFont(QFont('Microsoft YaHei', 9))
-        self.cb_send_mode.setMinimumWidth(130)
-        send_config_layout.addWidget(self.cb_send_mode, 0, 1)
-        
-        send_config_layout.addWidget(QLabel('文本编码'), 1, 0)
-        self.cb_send_coding = QComboBox()
-        self.cb_send_coding.addItems(['GBK', 'UTF-8'])
-        self.cb_send_coding.setEnabled(False)
-        self.cb_send_coding.setFont(QFont('Microsoft YaHei', 9))
-        self.cb_send_coding.setMinimumWidth(130)
-        send_config_layout.addWidget(self.cb_send_coding, 1, 1)
-        
-        right_layout.addWidget(send_config_group)
-        
-        # 添加弹性空间
-        right_layout.addStretch()
-        
+        # Main layout with splitter.
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(12)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addWidget(splitter)
+
+        # Build left and right panels.
+        left_panel = self._create_left_panel()
+        right_panel = self._create_right_panel()
+
+        splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
-        
-        # 设置分割比例
+
+        # Configure splitter proportions.
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
 
-        # 状态栏
+        # Configure status bar.
         self.statusBar().setSizeGripEnabled(False)
-        self.statusBar().showMessage('就绪')
+        self.statusBar().showMessage("Ready")
 
-        # 应用统一样式
-        self._apply_style()
-    
-    def _init_connections(self):
-        """初始化信号槽连接"""
-        # 按钮点击事件
+    def _create_left_panel(self) -> QWidget:
+        """Create the left panel containing receive and send areas.
+
+        Returns:
+            A QWidget containing the left panel layout.
+        """
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Receive area.
+        receive_group = QGroupBox("Receive")
+        receive_layout = QVBoxLayout(receive_group)
+
+        self.tb_receive = QTextEdit()
+        self.tb_receive.setReadOnly(True)
+        self.tb_receive.setFont(QFont("Consolas", 10))
+        self.tb_receive.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.tb_receive.setAcceptRichText(False)
+        self.tb_receive.setPlaceholderText("Waiting for data...")
+        receive_layout.addWidget(self.tb_receive, 1)
+
+        # Receive area buttons.
+        receive_btn_layout = QHBoxLayout()
+        receive_btn_layout.addStretch()
+        self.btn_clear_receive = QPushButton("Clear")
+        self.btn_clear_receive.setMinimumWidth(80)
+        self.btn_clear_receive.setProperty("muted", True)
+        self.btn_clear_receive.setCursor(Qt.CursorShape.PointingHandCursor)
+        receive_btn_layout.addWidget(self.btn_clear_receive)
+        receive_layout.addLayout(receive_btn_layout)
+
+        layout.addWidget(receive_group, 2)
+
+        # Send area.
+        send_group = QGroupBox("Send")
+        send_layout = QVBoxLayout(send_group)
+
+        self.tb_send = QTextEdit()
+        self.tb_send.setFont(QFont("Consolas", 10))
+        self.tb_send.setMaximumHeight(100)
+        self.tb_send.setAcceptRichText(False)
+        self.tb_send.setTabChangesFocus(True)
+        self.tb_send.setPlaceholderText("Enter data to send (HEX or text)...")
+        send_layout.addWidget(self.tb_send, 1)
+
+        # Send area buttons.
+        send_btn_layout = QHBoxLayout()
+        send_btn_layout.addStretch()
+        self.btn_clear_send = QPushButton("Clear")
+        self.btn_clear_send.setMinimumWidth(80)
+        self.btn_clear_send.setProperty("muted", True)
+        self.btn_clear_send.setCursor(Qt.CursorShape.PointingHandCursor)
+        send_btn_layout.addWidget(self.btn_clear_send)
+
+        self.btn_send = QPushButton("Send")
+        self.btn_send.setMinimumWidth(100)
+        self.btn_send.setEnabled(False)
+        self.btn_send.setProperty("primary", True)
+        self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
+        send_btn_layout.addWidget(self.btn_send)
+        send_layout.addLayout(send_btn_layout)
+
+        layout.addWidget(send_group, 1)
+
+        return panel
+
+    def _create_right_panel(self) -> QWidget:
+        """Create the right panel containing configuration options.
+
+        Returns:
+            A QWidget containing the right panel layout.
+        """
+        panel = QWidget()
+        panel.setFixedWidth(260)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Serial port configuration.
+        layout.addWidget(self._create_port_config_group())
+
+        # Receive configuration.
+        layout.addWidget(self._create_receive_config_group())
+
+        # Send configuration.
+        layout.addWidget(self._create_send_config_group())
+
+        layout.addStretch()
+
+        return panel
+
+    def _create_port_config_group(self) -> QGroupBox:
+        """Create the serial port configuration group box.
+
+        Returns:
+            A QGroupBox containing port configuration controls.
+        """
+        group = QGroupBox("Port Configuration")
+        layout = QGridLayout(group)
+        layout.setSpacing(10)
+        layout.setColumnStretch(1, 1)
+
+        row = 0
+
+        # Port selection.
+        layout.addWidget(QLabel("Port"), row, 0)
+        self.cb_port_name = QComboBox()
+        self.cb_port_name.setMinimumWidth(140)
+        layout.addWidget(self.cb_port_name, row, 1)
+        row += 1
+
+        # Baud rate.
+        layout.addWidget(QLabel("Baud Rate"), row, 0)
+        self.cb_baud_rate = QComboBox()
+        self.cb_baud_rate.addItems([
+            "300", "600", "1200", "2400", "4800", "9600", "14400",
+            "19200", "38400", "43000", "56000", "57600", "115200",
+            "128000", "256000"
+        ])
+        layout.addWidget(self.cb_baud_rate, row, 1)
+        row += 1
+
+        # Data bits.
+        layout.addWidget(QLabel("Data Bits"), row, 0)
+        self.cb_data_bits = QComboBox()
+        self.cb_data_bits.addItems(["5", "6", "7", "8"])
+        layout.addWidget(self.cb_data_bits, row, 1)
+        row += 1
+
+        # Stop bits.
+        layout.addWidget(QLabel("Stop Bits"), row, 0)
+        self.cb_stop_bits = QComboBox()
+        self.cb_stop_bits.addItems(["1", "1.5", "2"])
+        layout.addWidget(self.cb_stop_bits, row, 1)
+        row += 1
+
+        # Parity.
+        layout.addWidget(QLabel("Parity"), row, 0)
+        self.cb_parity = QComboBox()
+        self.cb_parity.addItems(["None", "Odd", "Even"])
+        layout.addWidget(self.cb_parity, row, 1)
+        row += 1
+
+        # Open/Close button.
+        layout.addWidget(QLabel("Action"), row, 0)
+        self.btn_open = QPushButton("Open Port")
+        self.btn_open.setObjectName("btn_open")
+        self.btn_open.setProperty("primary", True)
+        self.btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout.addWidget(self.btn_open, row, 1)
+        row += 1
+
+        # Status indicator.
+        self.lbl_port_status = QLabel("Disconnected")
+        self.lbl_port_status.setObjectName("port_status")
+        self.lbl_port_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_port_status, row, 0, 1, 2)
+
+        return group
+
+    def _create_receive_config_group(self) -> QGroupBox:
+        """Create the receive configuration group box.
+
+        Returns:
+            A QGroupBox containing receive settings controls.
+        """
+        group = QGroupBox("Receive Settings")
+        layout = QGridLayout(group)
+        layout.setSpacing(10)
+        layout.setColumnStretch(1, 1)
+
+        # Receive mode.
+        layout.addWidget(QLabel("Mode"), 0, 0)
+        self.cb_receive_mode = QComboBox()
+        self.cb_receive_mode.addItems(["HEX Mode", "Text Mode"])
+        self.cb_receive_mode.setMinimumWidth(140)
+        layout.addWidget(self.cb_receive_mode, 0, 1)
+
+        # Receive encoding.
+        layout.addWidget(QLabel("Encoding"), 1, 0)
+        self.cb_receive_encoding = QComboBox()
+        self.cb_receive_encoding.addItems(["GBK", "UTF-8"])
+        self.cb_receive_encoding.setEnabled(False)
+        layout.addWidget(self.cb_receive_encoding, 1, 1)
+
+        return group
+
+    def _create_send_config_group(self) -> QGroupBox:
+        """Create the send configuration group box.
+
+        Returns:
+            A QGroupBox containing send settings controls.
+        """
+        group = QGroupBox("Send Settings")
+        layout = QGridLayout(group)
+        layout.setSpacing(10)
+        layout.setColumnStretch(1, 1)
+
+        # Send mode.
+        layout.addWidget(QLabel("Mode"), 0, 0)
+        self.cb_send_mode = QComboBox()
+        self.cb_send_mode.addItems(["HEX Mode", "Text Mode"])
+        self.cb_send_mode.setMinimumWidth(140)
+        layout.addWidget(self.cb_send_mode, 0, 1)
+
+        # Send encoding.
+        layout.addWidget(QLabel("Encoding"), 1, 0)
+        self.cb_send_encoding = QComboBox()
+        self.cb_send_encoding.addItems(["GBK", "UTF-8"])
+        self.cb_send_encoding.setEnabled(False)
+        layout.addWidget(self.cb_send_encoding, 1, 1)
+
+        return group
+
+    def _init_connections(self) -> None:
+        """Initialize signal-slot connections."""
+        # Button clicks.
         self.btn_open.clicked.connect(self._on_open_clicked)
         self.btn_send.clicked.connect(self._on_send_clicked)
         self.btn_clear_receive.clicked.connect(self._on_clear_receive)
         self.btn_clear_send.clicked.connect(self._on_clear_send)
-        
-        # 串口下拉框展开事件 - 自动刷新串口列表
+
+        # Port dropdown refresh.
         self.cb_port_name.showPopup = self._on_port_dropdown
-        
-        # 模式/编码选择事件
-        self.cb_receive_mode.currentIndexChanged.connect(self._on_receive_mode_changed)
-        self.cb_receive_coding.currentIndexChanged.connect(self._on_receive_coding_changed)
-        self.cb_send_mode.currentIndexChanged.connect(self._on_send_mode_changed)
-        self.cb_send_coding.currentIndexChanged.connect(self._on_send_coding_changed)
-    
-    def _init_default_values(self):
-        """初始化控件默认值（移植自 Form1_Load）"""
-        self.cb_baud_rate.setCurrentIndex(12)  # 115200
-        self.cb_data_bits.setCurrentIndex(3)  # 8
-        self.cb_stop_bits.setCurrentIndex(0)  # 1
-        self.cb_parity.setCurrentIndex(0)     # 无
-        self.cb_receive_mode.setCurrentIndex(1)  # 文本模式
-        self.cb_receive_coding.setCurrentIndex(1)  # UTF-8
-        self.cb_send_mode.setCurrentIndex(1)  # 文本模式
-        self.cb_send_coding.setCurrentIndex(1)  # UTF-8
-        
-        # 刷新串口列表
-        self._refresh_port_list()
 
-        # 初始化串口状态样式
-        self._update_port_ui(False)
-
-    def _apply_style(self):
-        """应用统一样式"""
-        self.setStyleSheet(
-            """
-            QMainWindow {
-                background-color: #0F172A;
-            }
-            QWidget {
-                color: #E2E8F0;
-                font-family: "Microsoft YaHei UI", "Segoe UI", "Microsoft YaHei";
-                font-size: 12px;
-            }
-            QGroupBox {
-                background-color: #111827;
-                border: 1px solid #334155;
-                border-radius: 10px;
-                margin-top: 14px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 0 6px;
-                color: #E2E8F0;
-                font-weight: 600;
-            }
-            QTextEdit, QLineEdit {
-                background-color: #0B1220;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 6px;
-                selection-background-color: #2563EB;
-                selection-color: #F8FAFC;
-            }
-            QTextEdit:focus, QLineEdit:focus, QComboBox:focus {
-                border: 1px solid #60A5FA;
-            }
-            QComboBox {
-                background-color: #0B1220;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 4px 8px;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 22px;
-                border-left: 1px solid #334155;
-            }
-            QPushButton {
-                background-color: #1E293B;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 6px 12px;
-                color: #E2E8F0;
-            }
-            QPushButton:hover {
-                background-color: #22324A;
-                border-color: #475569;
-            }
-            QPushButton:pressed {
-                background-color: #0B1220;
-            }
-            QPushButton:disabled {
-                color: #64748B;
-                background-color: #0F172A;
-                border-color: #1F2937;
-            }
-            QPushButton[primary="true"] {
-                background-color: #2563EB;
-                border-color: #2563EB;
-            }
-            QPushButton[primary="true"]:hover {
-                background-color: #1D4ED8;
-            }
-            QPushButton[danger="true"] {
-                background-color: #F97316;
-                border-color: #F97316;
-                color: #0B1220;
-            }
-            QPushButton[danger="true"]:hover {
-                background-color: #EA580C;
-                border-color: #EA580C;
-            }
-            QPushButton[muted="true"] {
-                background-color: #0B1220;
-                border-color: #334155;
-                color: #CBD5E1;
-            }
-            QLabel#port_status {
-                padding: 4px 8px;
-                border-radius: 999px;
-                border: 1px solid #1F2937;
-                background-color: #0B1220;
-                color: #94A3B8;
-            }
-            QLabel#port_status[status="open"] {
-                color: #22C55E;
-                border-color: #14532D;
-                background-color: #052E1A;
-            }
-            QLabel#port_status[status="closed"] {
-                color: #94A3B8;
-                border-color: #1F2937;
-                background-color: #0B1220;
-            }
-            QLabel#port_status[status="error"] {
-                color: #F97316;
-                border-color: #7C2D12;
-                background-color: #1F1207;
-            }
-            QSplitter::handle {
-                background-color: #0B1220;
-            }
-            QScrollBar:vertical {
-                background: #0B1220;
-                width: 10px;
-                margin: 2px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background: #334155;
-                min-height: 20px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #475569;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0;
-            }
-            """
+        # Mode and encoding changes.
+        self.cb_receive_mode.currentIndexChanged.connect(
+            self._on_receive_mode_changed
+        )
+        self.cb_receive_encoding.currentIndexChanged.connect(
+            self._on_receive_encoding_changed
+        )
+        self.cb_send_mode.currentIndexChanged.connect(
+            self._on_send_mode_changed
+        )
+        self.cb_send_encoding.currentIndexChanged.connect(
+            self._on_send_encoding_changed
         )
 
-    def _set_status_badge(self, status: str, text: str):
-        """更新串口状态徽标"""
-        self.lbl_port_status.setProperty('status', status)
+    def _init_default_values(self) -> None:
+        """Initialize default control values."""
+        self.cb_baud_rate.setCurrentIndex(12)  # 115200
+        self.cb_data_bits.setCurrentIndex(3)   # 8
+        self.cb_stop_bits.setCurrentIndex(0)   # 1
+        self.cb_parity.setCurrentIndex(0)      # None
+        self.cb_receive_mode.setCurrentIndex(1)  # Text Mode
+        self.cb_receive_encoding.setCurrentIndex(1)  # UTF-8
+        self.cb_send_mode.setCurrentIndex(1)   # Text Mode
+        self.cb_send_encoding.setCurrentIndex(1)  # UTF-8
+
+        # Refresh port list.
+        self._refresh_port_list()
+
+        # Initialize port status UI.
+        self._update_port_ui(is_open=False)
+
+    def _set_status_badge(self, status: str, text: str) -> None:
+        """Update the port status badge.
+
+        Args:
+            status: Status type ('open', 'closed', or 'error').
+            text: Display text for the badge.
+        """
+        self.lbl_port_status.setProperty("status", status)
         self.lbl_port_status.setText(text)
         self.lbl_port_status.style().unpolish(self.lbl_port_status)
         self.lbl_port_status.style().polish(self.lbl_port_status)
         self.lbl_port_status.update()
 
-    def _update_port_ui(self, is_open: bool):
-        """同步串口打开/关闭时的 UI 状态"""
+    def _update_port_ui(self, is_open: bool) -> None:
+        """Update UI elements based on port connection state.
+
+        Args:
+            is_open: Whether the port is currently open.
+        """
         if is_open:
-            self.btn_open.setText('关闭串口')
-            self.btn_open.setProperty('danger', True)
-            self.btn_open.setProperty('primary', False)
+            self.btn_open.setText("Close Port")
+            self.btn_open.setProperty("danger", True)
+            self.btn_open.setProperty("primary", False)
             self.btn_send.setEnabled(True)
             self._set_config_enabled(False)
-            self._set_status_badge('open', '已连接')
-            self.statusBar().showMessage(f'已连接 {self.cb_port_name.currentText()}')
+            self._set_status_badge("open", "Connected")
+            self.statusBar().showMessage(
+                f"Connected to {self.cb_port_name.currentText()}"
+            )
         else:
-            self.btn_open.setText('打开串口')
-            self.btn_open.setProperty('danger', False)
-            self.btn_open.setProperty('primary', True)
+            self.btn_open.setText("Open Port")
+            self.btn_open.setProperty("danger", False)
+            self.btn_open.setProperty("primary", True)
             self.btn_send.setEnabled(False)
             self._set_config_enabled(True)
-            self._set_status_badge('closed', '未连接')
-            self.statusBar().showMessage('未连接')
+            self._set_status_badge("closed", "Disconnected")
+            self.statusBar().showMessage("Not connected")
 
+        # Force style update.
         self.btn_open.style().unpolish(self.btn_open)
         self.btn_open.style().polish(self.btn_open)
         self.btn_open.update()
-    
-    def _refresh_port_list(self):
-        """刷新可用串口列表"""
+
+    def _refresh_port_list(self) -> None:
+        """Refresh the available serial ports list."""
         current = self.cb_port_name.currentText()
         self.cb_port_name.clear()
         ports = get_available_ports()
         self.cb_port_name.addItems(ports)
-        
-        # 尝试恢复之前选择的串口
+
+        # Restore previous selection if still available.
         if current in ports:
             self.cb_port_name.setCurrentText(current)
-    
-    def _on_port_dropdown(self):
-        """串口下拉框展开时刷新列表（移植自 cbPortName_DropDown）"""
+
+    def _on_port_dropdown(self) -> None:
+        """Handle port dropdown expansion (refresh port list)."""
         self._refresh_port_list()
-        # 调用父类的 showPopup
         QComboBox.showPopup(self.cb_port_name)
-    
+
     def _open_serial_port(self) -> bool:
-        """打开串口（移植自 OpenSerialPort）"""
+        """Open the serial port with current configuration.
+
+        Returns:
+            True if port opened successfully, False otherwise.
+        """
         port_name = self.cb_port_name.currentText()
         if not port_name:
-            QMessageBox.warning(self, '提示', '请选择串口')
+            QMessageBox.warning(self, "Warning", "Please select a port.")
             return False
-        
+
         try:
             baud_rate = int(self.cb_baud_rate.currentText())
         except ValueError:
-            QMessageBox.warning(self, '提示', '波特率无效')
+            QMessageBox.warning(self, "Warning", "Invalid baud rate.")
             return False
-        
+
         data_bits = int(self.cb_data_bits.currentText())
-        
-        # 停止位映射
-        stop_bits_map = {'1': 1, '1.5': 1.5, '2': 2}
+
+        # Map stop bits.
+        stop_bits_map = {"1": 1, "1.5": 1.5, "2": 2}
         stop_bits = stop_bits_map.get(self.cb_stop_bits.currentText(), 1)
-        
-        # 校验位映射
-        parity_map = {'无': 'N', '奇校验': 'O', '偶校验': 'E'}
-        parity = parity_map.get(self.cb_parity.currentText(), 'N')
-        
-        if self._serial_worker.open_port(port_name, baud_rate, data_bits, stop_bits, parity):
-            # 启动接收线程
+
+        # Map parity.
+        parity_map = {"None": "N", "Odd": "O", "Even": "E"}
+        parity = parity_map.get(self.cb_parity.currentText(), "N")
+
+        if self._serial_worker.open_port(
+            port_name, baud_rate, data_bits, stop_bits, parity
+        ):
             self._serial_worker.start()
-            
-            # 更新 UI 状态
-            self._update_port_ui(True)
+            self._update_port_ui(is_open=True)
             return True
         else:
-            QMessageBox.warning(self, '提示', '串口打开失败')
+            QMessageBox.warning(self, "Warning", "Failed to open port.")
             return False
-    
-    def _close_serial_port(self):
-        """关闭串口（移植自 CloseSerialPort）"""
+
+    def _close_serial_port(self) -> None:
+        """Close the serial port."""
         self._serial_worker.close_port()
-        
-        # 重置编码处理器
         self._encoding_handler.reset()
-        
-        # 更新 UI 状态
-        self._update_port_ui(False)
-    
-    def _set_config_enabled(self, enabled: bool):
-        """设置配置控件的启用状态"""
+        self._update_port_ui(is_open=False)
+
+    def _set_config_enabled(self, enabled: bool) -> None:
+        """Enable or disable configuration controls.
+
+        Args:
+            enabled: Whether controls should be enabled.
+        """
         self.cb_port_name.setEnabled(enabled)
         self.cb_baud_rate.setEnabled(enabled)
         self.cb_data_bits.setEnabled(enabled)
         self.cb_stop_bits.setEnabled(enabled)
         self.cb_parity.setEnabled(enabled)
-    
-    def _on_open_clicked(self):
-        """打开/关闭串口按钮点击事件（移植自 btnOpen_Click）"""
-        if self.btn_open.text() == '打开串口':
+
+    def _on_open_clicked(self) -> None:
+        """Handle open/close button click."""
+        if self.btn_open.text() == "Open Port":
             self._open_serial_port()
         else:
             self._close_serial_port()
-    
-    def _on_send_clicked(self):
-        """发送按钮点击事件（移植自 btnSend_Click）"""
+
+    def _on_send_clicked(self) -> None:
+        """Handle send button click."""
         if not self._serial_worker.is_open:
             return
-        
+
         text = self.tb_send.toPlainText()
         if not text:
             return
-        
-        if self._send_mode == 'HEX模式':
+
+        if self._send_mode == "HEX模式":
             data = hex_to_bytes(text)
         else:
-            data = text_to_bytes(text, self._send_coding)
-        
+            data = text_to_bytes(text, self._send_encoding)
+
         self._serial_worker.write_data(data)
-    
-    def _on_clear_receive(self):
-        """清空接收区（移植自 btnClearReceive_Click）"""
+
+    def _on_clear_receive(self) -> None:
+        """Clear the receive text area."""
         self.tb_receive.clear()
-    
-    def _on_clear_send(self):
-        """清空发送区（移植自 btnClearSend_Click）"""
+
+    def _on_clear_send(self) -> None:
+        """Clear the send text area."""
         self.tb_send.clear()
-    
-    def _on_data_received(self, data: bytes):
-        """
-        处理接收到的数据（移植自 serialPort_DataReceived）
-        
+
+    def _on_data_received(self, data: bytes) -> None:
+        """Handle received serial data.
+
         Args:
-            data: 接收到的字节数据
+            data: Received byte data.
         """
-        if self._receive_mode == 'HEX模式':
+        if self._receive_mode == "HEX模式":
             text = bytes_to_hex(data)
         else:
             text = self._encoding_handler.decode(data)
-        
-        # 追加文本并滚动到底部
+
+        # Append text and scroll to bottom.
         self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
         self.tb_receive.insertPlainText(text)
         self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
-    
-    def _on_error(self, message: str):
-        """处理错误"""
-        self._set_status_badge('error', '错误')
-        QMessageBox.warning(self, '错误', message)
-    
-    def _on_port_disconnected(self):
-        """串口断开连接处理"""
+
+    def _on_error(self, message: str) -> None:
+        """Handle serial errors.
+
+        Args:
+            message: Error message to display.
+        """
+        self._set_status_badge("error", "Error")
+        QMessageBox.warning(self, "Error", message)
+
+    def _on_port_disconnected(self) -> None:
+        """Handle port disconnection."""
         self._close_serial_port()
-        self._set_status_badge('error', '已断开')
-        QMessageBox.warning(self, '提示', '串口已断开')
-    
-    def _on_receive_mode_changed(self, index: int):
-        """接收模式改变事件（移植自 cbReceiveMode_SelectedIndexChanged）"""
+        self._set_status_badge("error", "Disconnected")
+        QMessageBox.warning(self, "Warning", "Port disconnected.")
+
+    def _on_receive_mode_changed(self, index: int) -> None:
+        """Handle receive mode selection change.
+
+        Args:
+            index: Selected index in the combo box.
+        """
+        del index  # Unused.
         mode = self.cb_receive_mode.currentText()
-        if mode == 'HEX模式':
-            self.cb_receive_coding.setEnabled(False)
-            self._receive_mode = 'HEX模式'
+        if mode == "HEX Mode":
+            self.cb_receive_encoding.setEnabled(False)
+            self._receive_mode = "HEX模式"
         else:
-            self.cb_receive_coding.setEnabled(True)
-            self._receive_mode = '文本模式'
-        
-        # 重置编码处理器
+            self.cb_receive_encoding.setEnabled(True)
+            self._receive_mode = "文本模式"
+
         self._encoding_handler.reset()
-    
-    def _on_receive_coding_changed(self, index: int):
-        """接收编码改变事件（移植自 cbReceiveCoding_SelectedIndexChanged）"""
-        coding = self.cb_receive_coding.currentText()
-        self._receive_coding = coding
-        self._encoding_handler.encoding = coding.lower().replace('-', '')
+
+    def _on_receive_encoding_changed(self, index: int) -> None:
+        """Handle receive encoding selection change.
+
+        Args:
+            index: Selected index in the combo box.
+        """
+        del index  # Unused.
+        encoding = self.cb_receive_encoding.currentText()
+        self._receive_encoding = encoding
+        self._encoding_handler.encoding = encoding.lower().replace("-", "")
         self._encoding_handler.reset()
-    
-    def _on_send_mode_changed(self, index: int):
-        """发送模式改变事件（移植自 cbSendMode_SelectedIndexChanged）"""
+
+    def _on_send_mode_changed(self, index: int) -> None:
+        """Handle send mode selection change.
+
+        Args:
+            index: Selected index in the combo box.
+        """
+        del index  # Unused.
         mode = self.cb_send_mode.currentText()
-        if mode == 'HEX模式':
-            self.cb_send_coding.setEnabled(False)
-            self._send_mode = 'HEX模式'
+        if mode == "HEX Mode":
+            self.cb_send_encoding.setEnabled(False)
+            self._send_mode = "HEX模式"
         else:
-            self.cb_send_coding.setEnabled(True)
-            self._send_mode = '文本模式'
-    
-    def _on_send_coding_changed(self, index: int):
-        """发送编码改变事件（移植自 cbSendCoding_SelectedIndexChanged）"""
-        self._send_coding = self.cb_send_coding.currentText()
-    
-    def _check_port_status(self):
-        """定时检查串口状态（备用的热拔插检测方案）"""
-        if self.btn_open.text() == '关闭串口':
+            self.cb_send_encoding.setEnabled(True)
+            self._send_mode = "文本模式"
+
+    def _on_send_encoding_changed(self, index: int) -> None:
+        """Handle send encoding selection change.
+
+        Args:
+            index: Selected index in the combo box.
+        """
+        del index  # Unused.
+        self._send_encoding = self.cb_send_encoding.currentText()
+
+    def _check_port_status(self) -> None:
+        """Periodic check for port status (fallback hot-plug detection)."""
+        if self.btn_open.text() == "Close Port":
             if not self._serial_worker.is_open:
                 self._close_serial_port()
-    
-    def nativeEvent(self, event_type, message):
-        """
-        处理 Windows 原生事件（移植自 DefWndProc）
-        
-        用于检测 USB 设备的热拔插。
+
+    def nativeEvent(
+        self, event_type: bytes, message: int
+    ) -> tuple[bool, Optional[int]]:
+        """Handle Windows native events for USB hot-plug detection.
+
+        Args:
+            event_type: The type of native event.
+            message: The native message pointer.
+
+        Returns:
+            A tuple of (handled, result).
         """
         try:
-            if event_type == b'windows_generic_MSG':
+            if event_type == b"windows_generic_MSG":
                 msg = ctypes.wintypes.MSG.from_address(int(message))
                 if msg.message == WM_DEVICECHANGE:
                     if msg.wParam == DBT_DEVICEREMOVECOMPLETE:
-                        # 设备移除，检查串口状态
-                        if self.btn_open.text() == '关闭串口':
+                        if self.btn_open.text() == "Close Port":
                             if not self._serial_worker.is_open:
                                 self._close_serial_port()
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             pass
-        
+
         return super().nativeEvent(event_type, message)
-    
-    def closeEvent(self, event):
-        """窗口关闭事件"""
-        # 停止定时器
+
+    def closeEvent(self, event) -> None:
+        """Handle window close event.
+
+        Args:
+            event: The close event.
+        """
         self._check_timer.stop()
-        
-        # 关闭串口
+
         if self._serial_worker.is_open:
             self._serial_worker.close_port()
-        
+
         event.accept()

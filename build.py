@@ -1,52 +1,67 @@
 # -*- coding: utf-8 -*-
-"""
-Nuitka 打包脚本
+# Copyright 2024 Serial Assistant Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-使用 Nuitka 将 Python 项目编译为独立可执行文件。
+"""Nuitka Build Script.
+
+Compiles the Python project into a standalone executable using Nuitka.
 """
 
+import os
 import subprocess
 import sys
-import os
 
 
-def build():
-    """执行 Nuitka 打包"""
-    # 获取项目根目录
+def build() -> None:
+    """Execute the Nuitka compilation process."""
     project_root = os.path.dirname(os.path.abspath(__file__))
-    main_file = os.path.join(project_root, 'main.py')
-    
-    # Nuitka 编译命令
+    main_file = os.path.join(project_root, "main.py")
+
+    # Build Nuitka command arguments.
     cmd = [
-        sys.executable, '-m', 'nuitka',
-        '--standalone',                    # 独立打包
-        '--onefile',                       # 单文件模式
-        '--msvc=latest',                   # 使用最新的 MSVC 编译器
-        '--enable-plugin=pyside6',         # PySide6 插件
-        '--windows-disable-console',       # Windows 下禁用控制台
-        '--windows-icon-from-ico=icon.ico' if os.path.exists('icon.ico') else '',
-        '--output-dir=dist',               # 输出目录
-        '--company-name=SerialAssistant',
-        '--product-name=串口助手',
-        '--file-version=1.1.0',
-        '--product-version=1.1.0',
-        '--file-description=串口调试助手',
-        main_file
+        sys.executable,
+        "-m",
+        "nuitka",
+        "--standalone",
+        "--onefile",
+        "--msvc=latest",
+        "--enable-plugin=pyside6",
+        "--windows-disable-console",
+        "--output-dir=dist",
+        "--company-name=SerialAssistant",
+        "--product-name=Serial Assistant",
+        "--file-version=1.2.0",
+        "--product-version=1.2.0",
+        "--file-description=Serial Debugging Tool",
+        main_file,
     ]
-    
-    # 移除空字符串参数
-    cmd = [c for c in cmd if c]
-    
-    print('正在编译，请稍候...')
-    print(' '.join(cmd))
-    
+
+    # Add icon if available.
+    icon_path = os.path.join(project_root, "icon.ico")
+    if os.path.exists(icon_path):
+        cmd.insert(-1, f"--windows-icon-from-ico={icon_path}")
+
+    print("Building application, please wait...")
+    print(" ".join(cmd))
+
     try:
         subprocess.run(cmd, check=True)
-        print('\n编译完成！输出目录: dist/')
+        print("\nBuild completed! Output directory: dist/")
     except subprocess.CalledProcessError as e:
-        print(f'\n编译失败: {e}')
+        print(f"\nBuild failed: {e}")
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     build()
