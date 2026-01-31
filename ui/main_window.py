@@ -20,7 +20,7 @@ for the Serial Assistant application.
 """
 
 import ctypes
-from typing import Optional
+from typing import Optional, Tuple
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QTextCursor
@@ -628,7 +628,7 @@ class MainWindow(QMainWindow):
 
     def nativeEvent(
         self, event_type: bytes, message: int
-    ) -> tuple[bool, Optional[int]]:
+    ) -> Tuple[bool, Optional[int]]:
         """Handle Windows native events for USB hot-plug detection.
 
         Args:

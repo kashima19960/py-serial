@@ -19,7 +19,7 @@ Provides asynchronous serial port communication using QThread.
 Data is passed to the UI thread via Qt signals.
 """
 
-from typing import Optional
+from typing import List, Optional
 
 import serial
 from serial.tools import list_ports
@@ -176,7 +176,7 @@ class SerialWorker(QThread):
         self._running = False
 
 
-def get_available_ports() -> list[str]:
+def get_available_ports() -> List[str]:
     """Get a list of available serial port names.
 
     Returns:
