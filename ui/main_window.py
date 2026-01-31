@@ -47,6 +47,7 @@ from core.encoding_handler import (
 )
 from core.serial_worker import SerialWorker, get_available_ports
 from ui.styles import get_stylesheet
+from ui.i18n import I18n, t, LANG_ZH, LANG_EN
 
 
 # Windows message constants for device detection.
@@ -86,6 +87,9 @@ class MainWindow(QMainWindow):
         self._receive_encoding = "UTF-8"
         self._send_mode = "文本模式"
         self._send_encoding = "UTF-8"
+        
+        # Port open state for language switching.
+        self._is_port_open = False
 
         # Build UI.
         self._init_ui()
@@ -99,7 +103,7 @@ class MainWindow(QMainWindow):
 
     def _init_ui(self) -> None:
         """Initialize the user interface layout."""
-        self.setWindowTitle("Serial Assistant v1.2")
+        self.setWindowTitle(t("window_title"))
         self.resize(1024, 720)
         self.setMinimumSize(800, 600)
 
@@ -131,7 +135,7 @@ class MainWindow(QMainWindow):
 
         # Configure status bar.
         self.statusBar().setSizeGripEnabled(False)
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage(t("ready"))
 
     def _create_left_panel(self) -> QWidget:
         """Create the left panel containing receive and send areas.
@@ -145,51 +149,51 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Receive area.
-        receive_group = QGroupBox("Receive")
-        receive_layout = QVBoxLayout(receive_group)
+        self.grp_receive = QGroupBox(t("receive"))
+        receive_layout = QVBoxLayout(self.grp_receive)
 
         self.tb_receive = QTextEdit()
         self.tb_receive.setReadOnly(True)
         self.tb_receive.setFont(QFont("Consolas", 10))
         self.tb_receive.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.tb_receive.setAcceptRichText(False)
-        self.tb_receive.setPlaceholderText("Waiting for data...")
+        self.tb_receive.setPlaceholderText(t("waiting_data"))
         receive_layout.addWidget(self.tb_receive, 1)
 
         # Receive area buttons.
         receive_btn_layout = QHBoxLayout()
         receive_btn_layout.addStretch()
-        self.btn_clear_receive = QPushButton("Clear")
+        self.btn_clear_receive = QPushButton(t("clear"))
         self.btn_clear_receive.setMinimumWidth(80)
         self.btn_clear_receive.setProperty("muted", True)
         self.btn_clear_receive.setCursor(Qt.CursorShape.PointingHandCursor)
         receive_btn_layout.addWidget(self.btn_clear_receive)
         receive_layout.addLayout(receive_btn_layout)
 
-        layout.addWidget(receive_group, 2)
+        layout.addWidget(self.grp_receive, 2)
 
         # Send area.
-        send_group = QGroupBox("Send")
-        send_layout = QVBoxLayout(send_group)
+        self.grp_send = QGroupBox(t("send"))
+        send_layout = QVBoxLayout(self.grp_send)
 
         self.tb_send = QTextEdit()
         self.tb_send.setFont(QFont("Consolas", 10))
         self.tb_send.setMaximumHeight(100)
         self.tb_send.setAcceptRichText(False)
         self.tb_send.setTabChangesFocus(True)
-        self.tb_send.setPlaceholderText("Enter data to send (HEX or text)...")
+        self.tb_send.setPlaceholderText(t("enter_data"))
         send_layout.addWidget(self.tb_send, 1)
 
         # Send area buttons.
         send_btn_layout = QHBoxLayout()
         send_btn_layout.addStretch()
-        self.btn_clear_send = QPushButton("Clear")
+        self.btn_clear_send = QPushButton(t("clear"))
         self.btn_clear_send.setMinimumWidth(80)
         self.btn_clear_send.setProperty("muted", True)
         self.btn_clear_send.setCursor(Qt.CursorShape.PointingHandCursor)
         send_btn_layout.addWidget(self.btn_clear_send)
 
-        self.btn_send = QPushButton("Send")
+        self.btn_send = QPushButton(t("send_btn"))
         self.btn_send.setMinimumWidth(100)
         self.btn_send.setEnabled(False)
         self.btn_send.setProperty("primary", True)
@@ -197,7 +201,7 @@ class MainWindow(QMainWindow):
         send_btn_layout.addWidget(self.btn_send)
         send_layout.addLayout(send_btn_layout)
 
-        layout.addWidget(send_group, 1)
+        layout.addWidget(self.grp_send, 1)
 
         return panel
 
@@ -221,6 +225,9 @@ class MainWindow(QMainWindow):
 
         # Send configuration.
         layout.addWidget(self._create_send_config_group())
+        
+        # Language configuration.
+        layout.addWidget(self._create_language_group())
 
         layout.addStretch()
 
@@ -232,22 +239,24 @@ class MainWindow(QMainWindow):
         Returns:
             A QGroupBox containing port configuration controls.
         """
-        group = QGroupBox("Port Configuration")
-        layout = QGridLayout(group)
+        self.grp_port_config = QGroupBox(t("port_config"))
+        layout = QGridLayout(self.grp_port_config)
         layout.setSpacing(10)
         layout.setColumnStretch(1, 1)
 
         row = 0
 
         # Port selection.
-        layout.addWidget(QLabel("Port"), row, 0)
+        self.lbl_port = QLabel(t("port"))
+        layout.addWidget(self.lbl_port, row, 0)
         self.cb_port_name = QComboBox()
         self.cb_port_name.setMinimumWidth(140)
         layout.addWidget(self.cb_port_name, row, 1)
         row += 1
 
         # Baud rate.
-        layout.addWidget(QLabel("Baud Rate"), row, 0)
+        self.lbl_baud_rate = QLabel(t("baud_rate"))
+        layout.addWidget(self.lbl_baud_rate, row, 0)
         self.cb_baud_rate = QComboBox()
         self.cb_baud_rate.addItems([
             "300", "600", "1200", "2400", "4800", "9600", "14400",
@@ -258,29 +267,33 @@ class MainWindow(QMainWindow):
         row += 1
 
         # Data bits.
-        layout.addWidget(QLabel("Data Bits"), row, 0)
+        self.lbl_data_bits = QLabel(t("data_bits"))
+        layout.addWidget(self.lbl_data_bits, row, 0)
         self.cb_data_bits = QComboBox()
         self.cb_data_bits.addItems(["5", "6", "7", "8"])
         layout.addWidget(self.cb_data_bits, row, 1)
         row += 1
 
         # Stop bits.
-        layout.addWidget(QLabel("Stop Bits"), row, 0)
+        self.lbl_stop_bits = QLabel(t("stop_bits"))
+        layout.addWidget(self.lbl_stop_bits, row, 0)
         self.cb_stop_bits = QComboBox()
         self.cb_stop_bits.addItems(["1", "1.5", "2"])
         layout.addWidget(self.cb_stop_bits, row, 1)
         row += 1
 
         # Parity.
-        layout.addWidget(QLabel("Parity"), row, 0)
+        self.lbl_parity = QLabel(t("parity"))
+        layout.addWidget(self.lbl_parity, row, 0)
         self.cb_parity = QComboBox()
-        self.cb_parity.addItems(["None", "Odd", "Even"])
+        self._update_parity_items()
         layout.addWidget(self.cb_parity, row, 1)
         row += 1
 
         # Open/Close button.
-        layout.addWidget(QLabel("Action"), row, 0)
-        self.btn_open = QPushButton("Open Port")
+        self.lbl_action = QLabel(t("action"))
+        layout.addWidget(self.lbl_action, row, 0)
+        self.btn_open = QPushButton(t("open_port"))
         self.btn_open.setObjectName("btn_open")
         self.btn_open.setProperty("primary", True)
         self.btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -288,12 +301,12 @@ class MainWindow(QMainWindow):
         row += 1
 
         # Status indicator.
-        self.lbl_port_status = QLabel("Disconnected")
+        self.lbl_port_status = QLabel(t("disconnected"))
         self.lbl_port_status.setObjectName("port_status")
         self.lbl_port_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.lbl_port_status, row, 0, 1, 2)
 
-        return group
+        return self.grp_port_config
 
     def _create_receive_config_group(self) -> QGroupBox:
         """Create the receive configuration group box.
@@ -301,26 +314,28 @@ class MainWindow(QMainWindow):
         Returns:
             A QGroupBox containing receive settings controls.
         """
-        group = QGroupBox("Receive Settings")
-        layout = QGridLayout(group)
+        self.grp_receive_config = QGroupBox(t("receive_settings"))
+        layout = QGridLayout(self.grp_receive_config)
         layout.setSpacing(10)
         layout.setColumnStretch(1, 1)
 
         # Receive mode.
-        layout.addWidget(QLabel("Mode"), 0, 0)
+        self.lbl_receive_mode = QLabel(t("mode"))
+        layout.addWidget(self.lbl_receive_mode, 0, 0)
         self.cb_receive_mode = QComboBox()
-        self.cb_receive_mode.addItems(["HEX Mode", "Text Mode"])
+        self._update_receive_mode_items()
         self.cb_receive_mode.setMinimumWidth(140)
         layout.addWidget(self.cb_receive_mode, 0, 1)
 
         # Receive encoding.
-        layout.addWidget(QLabel("Encoding"), 1, 0)
+        self.lbl_receive_encoding = QLabel(t("encoding"))
+        layout.addWidget(self.lbl_receive_encoding, 1, 0)
         self.cb_receive_encoding = QComboBox()
         self.cb_receive_encoding.addItems(["GBK", "UTF-8"])
         self.cb_receive_encoding.setEnabled(False)
         layout.addWidget(self.cb_receive_encoding, 1, 1)
 
-        return group
+        return self.grp_receive_config
 
     def _create_send_config_group(self) -> QGroupBox:
         """Create the send configuration group box.
@@ -328,26 +343,75 @@ class MainWindow(QMainWindow):
         Returns:
             A QGroupBox containing send settings controls.
         """
-        group = QGroupBox("Send Settings")
-        layout = QGridLayout(group)
+        self.grp_send_config = QGroupBox(t("send_settings"))
+        layout = QGridLayout(self.grp_send_config)
         layout.setSpacing(10)
         layout.setColumnStretch(1, 1)
 
         # Send mode.
-        layout.addWidget(QLabel("Mode"), 0, 0)
+        self.lbl_send_mode = QLabel(t("mode"))
+        layout.addWidget(self.lbl_send_mode, 0, 0)
         self.cb_send_mode = QComboBox()
-        self.cb_send_mode.addItems(["HEX Mode", "Text Mode"])
+        self._update_send_mode_items()
         self.cb_send_mode.setMinimumWidth(140)
         layout.addWidget(self.cb_send_mode, 0, 1)
 
         # Send encoding.
-        layout.addWidget(QLabel("Encoding"), 1, 0)
+        self.lbl_send_encoding = QLabel(t("encoding"))
+        layout.addWidget(self.lbl_send_encoding, 1, 0)
         self.cb_send_encoding = QComboBox()
         self.cb_send_encoding.addItems(["GBK", "UTF-8"])
         self.cb_send_encoding.setEnabled(False)
         layout.addWidget(self.cb_send_encoding, 1, 1)
 
-        return group
+        return self.grp_send_config
+    
+    def _create_language_group(self) -> QGroupBox:
+        """Create the language configuration group box.
+
+        Returns:
+            A QGroupBox containing language selection control.
+        """
+        self.grp_language = QGroupBox(t("language"))
+        layout = QGridLayout(self.grp_language)
+        layout.setSpacing(10)
+        layout.setColumnStretch(1, 1)
+
+        # Language selection.
+        self.lbl_language = QLabel(t("language"))
+        layout.addWidget(self.lbl_language, 0, 0)
+        self.cb_language = QComboBox()
+        self.cb_language.addItems([t("lang_zh"), t("lang_en")])
+        self.cb_language.setMinimumWidth(140)
+        # Set current language.
+        if I18n.get_lang() == LANG_ZH:
+            self.cb_language.setCurrentIndex(0)
+        else:
+            self.cb_language.setCurrentIndex(1)
+        layout.addWidget(self.cb_language, 0, 1)
+
+        return self.grp_language
+    
+    def _update_parity_items(self) -> None:
+        """Update parity combo box items based on current language."""
+        current_index = self.cb_parity.currentIndex() if self.cb_parity.count() > 0 else 0
+        self.cb_parity.clear()
+        self.cb_parity.addItems([t("parity_none"), t("parity_odd"), t("parity_even")])
+        self.cb_parity.setCurrentIndex(current_index)
+    
+    def _update_receive_mode_items(self) -> None:
+        """Update receive mode combo box items based on current language."""
+        current_index = self.cb_receive_mode.currentIndex() if self.cb_receive_mode.count() > 0 else 1
+        self.cb_receive_mode.clear()
+        self.cb_receive_mode.addItems([t("hex_mode"), t("text_mode")])
+        self.cb_receive_mode.setCurrentIndex(current_index)
+    
+    def _update_send_mode_items(self) -> None:
+        """Update send mode combo box items based on current language."""
+        current_index = self.cb_send_mode.currentIndex() if self.cb_send_mode.count() > 0 else 1
+        self.cb_send_mode.clear()
+        self.cb_send_mode.addItems([t("hex_mode"), t("text_mode")])
+        self.cb_send_mode.setCurrentIndex(current_index)
 
     def _init_connections(self) -> None:
         """Initialize signal-slot connections."""
@@ -373,6 +437,9 @@ class MainWindow(QMainWindow):
         self.cb_send_encoding.currentIndexChanged.connect(
             self._on_send_encoding_changed
         )
+        
+        # Language change.
+        self.cb_language.currentIndexChanged.connect(self._on_language_changed)
 
     def _init_default_values(self) -> None:
         """Initialize default control values."""
@@ -410,24 +477,25 @@ class MainWindow(QMainWindow):
         Args:
             is_open: Whether the port is currently open.
         """
+        self._is_port_open = is_open
         if is_open:
-            self.btn_open.setText("Close Port")
+            self.btn_open.setText(t("close_port"))
             self.btn_open.setProperty("danger", True)
             self.btn_open.setProperty("primary", False)
             self.btn_send.setEnabled(True)
             self._set_config_enabled(False)
-            self._set_status_badge("open", "Connected")
+            self._set_status_badge("open", t("connected"))
             self.statusBar().showMessage(
-                f"Connected to {self.cb_port_name.currentText()}"
+                t("connected_to", port=self.cb_port_name.currentText())
             )
         else:
-            self.btn_open.setText("Open Port")
+            self.btn_open.setText(t("open_port"))
             self.btn_open.setProperty("danger", False)
             self.btn_open.setProperty("primary", True)
             self.btn_send.setEnabled(False)
             self._set_config_enabled(True)
-            self._set_status_badge("closed", "Disconnected")
-            self.statusBar().showMessage("Not connected")
+            self._set_status_badge("closed", t("disconnected"))
+            self.statusBar().showMessage(t("not_connected"))
 
         # Force style update.
         self.btn_open.style().unpolish(self.btn_open)
@@ -458,13 +526,13 @@ class MainWindow(QMainWindow):
         """
         port_name = self.cb_port_name.currentText()
         if not port_name:
-            QMessageBox.warning(self, "Warning", "Please select a port.")
+            QMessageBox.warning(self, t("warning"), t("select_port"))
             return False
 
         try:
             baud_rate = int(self.cb_baud_rate.currentText())
         except ValueError:
-            QMessageBox.warning(self, "Warning", "Invalid baud rate.")
+            QMessageBox.warning(self, t("warning"), t("invalid_baud"))
             return False
 
         data_bits = int(self.cb_data_bits.currentText())
@@ -473,9 +541,10 @@ class MainWindow(QMainWindow):
         stop_bits_map = {"1": 1, "1.5": 1.5, "2": 2}
         stop_bits = stop_bits_map.get(self.cb_stop_bits.currentText(), 1)
 
-        # Map parity.
-        parity_map = {"None": "N", "Odd": "O", "Even": "E"}
-        parity = parity_map.get(self.cb_parity.currentText(), "N")
+        # Map parity (use index instead of text for language independence).
+        parity_index = self.cb_parity.currentIndex()
+        parity_map = {0: "N", 1: "O", 2: "E"}
+        parity = parity_map.get(parity_index, "N")
 
         if self._serial_worker.open_port(
             port_name, baud_rate, data_bits, stop_bits, parity
@@ -484,7 +553,7 @@ class MainWindow(QMainWindow):
             self._update_port_ui(is_open=True)
             return True
         else:
-            QMessageBox.warning(self, "Warning", "Failed to open port.")
+            QMessageBox.warning(self, t("warning"), t("open_failed"))
             return False
 
     def _close_serial_port(self) -> None:
@@ -507,7 +576,7 @@ class MainWindow(QMainWindow):
 
     def _on_open_clicked(self) -> None:
         """Handle open/close button click."""
-        if self.btn_open.text() == "Open Port":
+        if not self._is_port_open:
             self._open_serial_port()
         else:
             self._close_serial_port()
@@ -558,14 +627,14 @@ class MainWindow(QMainWindow):
         Args:
             message: Error message to display.
         """
-        self._set_status_badge("error", "Error")
-        QMessageBox.warning(self, "Error", message)
+        self._set_status_badge("error", t("error"))
+        QMessageBox.warning(self, t("error"), message)
 
     def _on_port_disconnected(self) -> None:
         """Handle port disconnection."""
         self._close_serial_port()
-        self._set_status_badge("error", "Disconnected")
-        QMessageBox.warning(self, "Warning", "Port disconnected.")
+        self._set_status_badge("error", t("disconnected"))
+        QMessageBox.warning(self, t("warning"), t("port_disconnected"))
 
     def _on_receive_mode_changed(self, index: int) -> None:
         """Handle receive mode selection change.
@@ -573,12 +642,10 @@ class MainWindow(QMainWindow):
         Args:
             index: Selected index in the combo box.
         """
-        del index  # Unused.
-        mode = self.cb_receive_mode.currentText()
-        if mode == "HEX Mode":
+        if index == 0:  # HEX Mode
             self.cb_receive_encoding.setEnabled(False)
             self._receive_mode = "HEX模式"
-        else:
+        else:  # Text Mode
             self.cb_receive_encoding.setEnabled(True)
             self._receive_mode = "文本模式"
 
@@ -602,12 +669,10 @@ class MainWindow(QMainWindow):
         Args:
             index: Selected index in the combo box.
         """
-        del index  # Unused.
-        mode = self.cb_send_mode.currentText()
-        if mode == "HEX Mode":
+        if index == 0:  # HEX Mode
             self.cb_send_encoding.setEnabled(False)
             self._send_mode = "HEX模式"
-        else:
+        else:  # Text Mode
             self.cb_send_encoding.setEnabled(True)
             self._send_mode = "文本模式"
 
@@ -619,10 +684,86 @@ class MainWindow(QMainWindow):
         """
         del index  # Unused.
         self._send_encoding = self.cb_send_encoding.currentText()
+    
+    def _on_language_changed(self, index: int) -> None:
+        """Handle language selection change.
+
+        Args:
+            index: Selected index in the combo box (0=Chinese, 1=English).
+        """
+        if index == 0:
+            I18n.set_lang(LANG_ZH)
+        else:
+            I18n.set_lang(LANG_EN)
+        
+        # Update all UI texts.
+        self._update_ui_texts()
+    
+    def _update_ui_texts(self) -> None:
+        """Update all UI texts after language change."""
+        # Window title.
+        self.setWindowTitle(t("window_title"))
+        
+        # Group boxes.
+        self.grp_receive.setTitle(t("receive"))
+        self.grp_send.setTitle(t("send"))
+        self.grp_port_config.setTitle(t("port_config"))
+        self.grp_receive_config.setTitle(t("receive_settings"))
+        self.grp_send_config.setTitle(t("send_settings"))
+        self.grp_language.setTitle(t("language"))
+        
+        # Port config labels.
+        self.lbl_port.setText(t("port"))
+        self.lbl_baud_rate.setText(t("baud_rate"))
+        self.lbl_data_bits.setText(t("data_bits"))
+        self.lbl_stop_bits.setText(t("stop_bits"))
+        self.lbl_parity.setText(t("parity"))
+        self.lbl_action.setText(t("action"))
+        
+        # Receive/Send config labels.
+        self.lbl_receive_mode.setText(t("mode"))
+        self.lbl_receive_encoding.setText(t("encoding"))
+        self.lbl_send_mode.setText(t("mode"))
+        self.lbl_send_encoding.setText(t("encoding"))
+        self.lbl_language.setText(t("language"))
+        
+        # Buttons.
+        self.btn_clear_receive.setText(t("clear"))
+        self.btn_clear_send.setText(t("clear"))
+        self.btn_send.setText(t("send_btn"))
+        
+        # Open/Close button (based on state).
+        if self._is_port_open:
+            self.btn_open.setText(t("close_port"))
+            self._set_status_badge("open", t("connected"))
+            self.statusBar().showMessage(
+                t("connected_to", port=self.cb_port_name.currentText())
+            )
+        else:
+            self.btn_open.setText(t("open_port"))
+            self._set_status_badge("closed", t("disconnected"))
+            self.statusBar().showMessage(t("not_connected"))
+        
+        # Placeholders.
+        self.tb_receive.setPlaceholderText(t("waiting_data"))
+        self.tb_send.setPlaceholderText(t("enter_data"))
+        
+        # Combo box items.
+        self._update_parity_items()
+        self._update_receive_mode_items()
+        self._update_send_mode_items()
+        
+        # Language combo box (update display names).
+        current_lang_index = self.cb_language.currentIndex()
+        self.cb_language.blockSignals(True)
+        self.cb_language.clear()
+        self.cb_language.addItems([t("lang_zh"), t("lang_en")])
+        self.cb_language.setCurrentIndex(current_lang_index)
+        self.cb_language.blockSignals(False)
 
     def _check_port_status(self) -> None:
         """Periodic check for port status (fallback hot-plug detection)."""
-        if self.btn_open.text() == "Close Port":
+        if self._is_port_open:
             if not self._serial_worker.is_open:
                 self._close_serial_port()
 
@@ -643,7 +784,7 @@ class MainWindow(QMainWindow):
                 msg = ctypes.wintypes.MSG.from_address(int(message))
                 if msg.message == WM_DEVICECHANGE:
                     if msg.wParam == DBT_DEVICEREMOVECOMPLETE:
-                        if self.btn_open.text() == "Close Port":
+                        if self._is_port_open:
                             if not self._serial_worker.is_open:
                                 self._close_serial_port()
         except Exception:  # pylint: disable=broad-except
