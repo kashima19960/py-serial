@@ -201,6 +201,28 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         LANG_ZH: "● 录制中",
         LANG_EN: "● REC",
     },
+    "status_rate": {
+        LANG_ZH: "{rate}",
+        LANG_EN: "{rate}",
+    },
+
+    # Port presets
+    "port_preset": {
+        LANG_ZH: "参数预设",
+        LANG_EN: "Preset",
+    },
+    "save_preset": {
+        LANG_ZH: "保存预设",
+        LANG_EN: "Save Preset",
+    },
+    "delete_preset": {
+        LANG_ZH: "删除预设",
+        LANG_EN: "Delete Preset",
+    },
+    "preset_name_label": {
+        LANG_ZH: "预设名称:",
+        LANG_EN: "Preset Name:",
+    },
 
     # Font menu
     "menu_font": {

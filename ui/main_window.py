@@ -117,6 +117,10 @@ class MainWindow(QMainWindow):
         # Byte counters.
         self._rx_byte_count = 0
         self._tx_byte_count = 0
+        self._rx_bytes_prev = 0
+        self._tx_bytes_prev = 0
+        self._rx_rate = 0.0
+        self._tx_rate = 0.0
 
         # Search / filter state.
         self._raw_receive_lines: List[str] = [""]
@@ -137,6 +141,11 @@ class MainWindow(QMainWindow):
         self._check_timer = QTimer()
         self._check_timer.timeout.connect(self._check_port_status)
         self._check_timer.start(1000)
+
+        # Timer for RX/TX rate calculation (1s interval).
+        self._rate_timer = QTimer()
+        self._rate_timer.timeout.connect(self._update_rate_counters)
+        self._rate_timer.start(1000)
 
     def _init_ui(self) -> None:
         """Initialize the user interface layout."""
@@ -191,6 +200,14 @@ class MainWindow(QMainWindow):
         self.lbl_status_tx.setObjectName("status_field")
         self.statusBar().addPermanentWidget(self.lbl_status_tx)
 
+        self.lbl_status_rx_rate = QLabel(t("status_rate", rate="0 B/s"))
+        self.lbl_status_rx_rate.setObjectName("status_field")
+        self.statusBar().addPermanentWidget(self.lbl_status_rx_rate)
+
+        self.lbl_status_tx_rate = QLabel(t("status_rate", rate="0 B/s"))
+        self.lbl_status_tx_rate.setObjectName("status_field")
+        self.statusBar().addPermanentWidget(self.lbl_status_tx_rate)
+
         self.lbl_status_rec = QLabel(t("status_recording"))
         self.lbl_status_rec.setObjectName("status_rec")
         self.lbl_status_rec.setVisible(False)
@@ -206,6 +223,35 @@ class MainWindow(QMainWindow):
         self.lbl_status_tx.setText(
             t("status_tx", count=self._format_bytes(self._tx_byte_count))
         )
+
+    def _update_rate_counters(self) -> None:
+        """Calculate and display RX/TX throughput rates (called every 1s)."""
+        self._rx_rate = float(self._rx_byte_count - self._rx_bytes_prev)
+        self._tx_rate = float(self._tx_byte_count - self._tx_bytes_prev)
+        self._rx_bytes_prev = self._rx_byte_count
+        self._tx_bytes_prev = self._tx_byte_count
+        self.lbl_status_rx_rate.setText(
+            t("status_rate", rate=self._format_rate(self._rx_rate))
+        )
+        self.lbl_status_tx_rate.setText(
+            t("status_rate", rate=self._format_rate(self._tx_rate))
+        )
+
+    @staticmethod
+    def _format_rate(bps: float) -> str:
+        """Format bytes-per-second into a human-readable rate string.
+
+        Args:
+            bps: Bytes per second.
+
+        Returns:
+            Formatted string like "1.2 KB/s" or "345 B/s".
+        """
+        if bps < 1024:
+            return f"{bps:.0f} B/s"
+        if bps < 1024 * 1024:
+            return f"{bps / 1024:.1f} KB/s"
+        return f"{bps / (1024 * 1024):.1f} MB/s"
 
     @staticmethod
     def _format_bytes(count: int) -> str:
@@ -534,6 +580,34 @@ class MainWindow(QMainWindow):
         self.lbl_port_status.setObjectName("port_status")
         self.lbl_port_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.lbl_port_status, row, 0, 1, 2)
+        row += 1
+
+        # Preset selector.
+        self.lbl_preset = QLabel(t("port_preset"))
+        layout.addWidget(self.lbl_preset, row, 0)
+        self.cb_preset = QComboBox()
+        self.cb_preset.setMinimumWidth(140)
+        self._port_presets: dict[str, dict] = {}
+        self._load_port_presets()
+        self._rebuild_preset_list()
+        self.cb_preset.activated.connect(self._on_preset_activated)
+        layout.addWidget(self.cb_preset, row, 1)
+        row += 1
+
+        # Preset action buttons.
+        preset_btn_layout = QHBoxLayout()
+        self.btn_save_preset = QPushButton(t("save_preset"))
+        self.btn_save_preset.setProperty("primary", True)
+        self.btn_save_preset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_save_preset.clicked.connect(self._on_save_preset)
+        preset_btn_layout.addWidget(self.btn_save_preset)
+
+        self.btn_delete_preset = QPushButton(t("delete_preset"))
+        self.btn_delete_preset.setProperty("danger", True)
+        self.btn_delete_preset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_delete_preset.clicked.connect(self._on_delete_preset)
+        preset_btn_layout.addWidget(self.btn_delete_preset)
+        layout.addLayout(preset_btn_layout, row, 0, 1, 2)
 
         return self.grp_port_config
 
@@ -1523,6 +1597,125 @@ class MainWindow(QMainWindow):
         # Rebuild combo box with updated custom list.
         self._build_baud_rate_list()
 
+    def _load_port_presets(self) -> None:
+        """Load port presets from config file."""
+        import json
+        import os
+        self._preset_path = os.path.join(
+            os.path.expanduser("~"), ".serial_assistant", "port_presets.json"
+        )
+        try:
+            if os.path.exists(self._preset_path):
+                with open(self._preset_path, "r", encoding="utf-8") as f:
+                    self._port_presets = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            self._port_presets = {}
+
+    def _save_port_presets_to_file(self) -> None:
+        """Persist port presets to config file."""
+        import json
+        import os
+        try:
+            os.makedirs(os.path.dirname(self._preset_path), exist_ok=True)
+            with open(self._preset_path, "w", encoding="utf-8") as f:
+                json.dump(self._port_presets, f, ensure_ascii=False, indent=2)
+        except OSError:
+            pass
+
+    def _rebuild_preset_list(self) -> None:
+        """Rebuild the preset combo box from current presets."""
+        self.cb_preset.blockSignals(True)
+        current = self.cb_preset.currentText()
+        self.cb_preset.clear()
+        self.cb_preset.addItem("")  # Empty = no preset selected
+        for name in sorted(self._port_presets.keys()):
+            self.cb_preset.addItem(name)
+        idx = self.cb_preset.findText(current)
+        self.cb_preset.setCurrentIndex(max(idx, 0))
+        self.cb_preset.blockSignals(False)
+
+    def _capture_current_config(self) -> dict:
+        """Capture the current serial port configuration.
+
+        Returns:
+            Dict with port config keys.
+        """
+        return {
+            "port": self.cb_port_name.currentText(),
+            "baud": self.cb_baud_rate.currentText(),
+            "data_bits": self.cb_data_bits.currentIndex(),
+            "stop_bits": self.cb_stop_bits.currentIndex(),
+            "parity": self.cb_parity.currentIndex(),
+        }
+
+    def _apply_preset(self, config: dict) -> None:
+        """Apply a saved preset configuration to the UI controls.
+
+        Args:
+            config: Dict with port config keys.
+        """
+        port = config.get("port", "")
+        idx = self.cb_port_name.findText(port)
+        if idx >= 0:
+            self.cb_port_name.setCurrentIndex(idx)
+
+        baud = config.get("baud", "")
+        idx = self.cb_baud_rate.findText(baud)
+        if idx >= 0:
+            self.cb_baud_rate.setCurrentIndex(idx)
+
+        data_bits = config.get("data_bits", 3)
+        if 0 <= data_bits < self.cb_data_bits.count():
+            self.cb_data_bits.setCurrentIndex(data_bits)
+
+        stop_bits = config.get("stop_bits", 0)
+        if 0 <= stop_bits < self.cb_stop_bits.count():
+            self.cb_stop_bits.setCurrentIndex(stop_bits)
+
+        parity = config.get("parity", 0)
+        if 0 <= parity < self.cb_parity.count():
+            self.cb_parity.setCurrentIndex(parity)
+
+    def _on_save_preset(self) -> None:
+        """Save current config as a named preset."""
+        from PySide6.QtWidgets import QInputDialog
+
+        name, ok = QInputDialog.getText(
+            self, t("save_preset"), t("preset_name_label")
+        )
+        if not ok or not name.strip():
+            return
+
+        name = name.strip()
+        self._port_presets[name] = self._capture_current_config()
+        self._save_port_presets_to_file()
+        self._rebuild_preset_list()
+
+        # Select the newly saved preset.
+        idx = self.cb_preset.findText(name)
+        if idx >= 0:
+            self.cb_preset.setCurrentIndex(idx)
+
+    def _on_delete_preset(self) -> None:
+        """Delete the currently selected preset."""
+        name = self.cb_preset.currentText()
+        if not name or name not in self._port_presets:
+            return
+
+        del self._port_presets[name]
+        self._save_port_presets_to_file()
+        self._rebuild_preset_list()
+
+    def _on_preset_activated(self, index: int) -> None:
+        """Handle preset combo box selection.
+
+        Args:
+            index: The activated index.
+        """
+        name = self.cb_preset.currentText()
+        if name and name in self._port_presets:
+            self._apply_preset(self._port_presets[name])
+
     def _check_port_status(self) -> None:
         """Periodic check for port status (fallback hot-plug detection)."""
         if self._is_port_open:
@@ -1561,6 +1754,7 @@ class MainWindow(QMainWindow):
             event: The close event.
         """
         self._check_timer.stop()
+        self._rate_timer.stop()
 
         if self._serial_worker.is_open:
             self._serial_worker.close_port()
