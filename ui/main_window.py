@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -412,6 +413,11 @@ class MainWindow(QMainWindow):
 
         # Send area buttons.
         send_btn_layout = QHBoxLayout()
+
+        self.chk_append_crlf = QCheckBox(t("append_crlf"))
+        self.chk_append_crlf.setCursor(Qt.CursorShape.PointingHandCursor)
+        send_btn_layout.addWidget(self.chk_append_crlf)
+
         send_btn_layout.addStretch()
         self.btn_clear_send = QPushButton(t("clear"))
         self.btn_clear_send.setMinimumWidth(80)
@@ -478,11 +484,14 @@ class MainWindow(QMainWindow):
         self.lbl_baud_rate = QLabel(t("baud_rate"))
         layout.addWidget(self.lbl_baud_rate, row, 0)
         self.cb_baud_rate = QComboBox()
-        self.cb_baud_rate.addItems([
+        self._DEFAULT_BAUDS = [
             "300", "600", "1200", "2400", "4800", "9600", "14400",
             "19200", "38400", "43000", "56000", "57600", "115200",
             "128000", "256000"
-        ])
+        ]
+        self._custom_bauds: list[str] = []
+        self._build_baud_rate_list()
+        self.cb_baud_rate.activated.connect(self._on_baud_rate_activated)
         layout.addWidget(self.cb_baud_rate, row, 1)
         row += 1
 
@@ -778,6 +787,10 @@ class MainWindow(QMainWindow):
         if not text:
             return
 
+        # Append CR+LF if checkbox is checked.
+        if self.chk_append_crlf.isChecked():
+            text += "\r\n"
+
         if self._send_mode == "HEX模式":
             data = hex_to_bytes(text)
         else:
@@ -1015,6 +1028,7 @@ class MainWindow(QMainWindow):
         self.chk_auto_scroll.setText(t("auto_scroll"))
         self.chk_filter.setText(t("filter_mode"))
         self.chk_regex.setText(t("regex_mode"))
+        self.chk_append_crlf.setText(t("append_crlf"))
         
         # Menu bar texts.
         self.menu_file.setTitle(t("menu_file"))
@@ -1379,6 +1393,135 @@ class MainWindow(QMainWindow):
         font = QFont(self._current_font_family, self._current_font_size)
         self.tb_receive.setFont(font)
         self.tb_send.setFont(font)
+
+    def _build_baud_rate_list(self) -> None:
+        """Rebuild the baud rate combo box with preset + custom values + actions."""
+        current_text = self.cb_baud_rate.currentText()
+        self.cb_baud_rate.blockSignals(True)
+        self.cb_baud_rate.clear()
+
+        # Preset baud rates.
+        for baud in self._DEFAULT_BAUDS:
+            self.cb_baud_rate.addItem(baud)
+
+        # Custom baud rates.
+        if self._custom_bauds:
+            self.cb_baud_rate.insertSeparator(self.cb_baud_rate.count())
+            for baud in self._custom_bauds:
+                self.cb_baud_rate.addItem(f"★ {baud}")
+
+        # Action items at the bottom.
+        self.cb_baud_rate.insertSeparator(self.cb_baud_rate.count())
+        self._baud_add_index = self.cb_baud_rate.count()
+        self.cb_baud_rate.addItem(f"➕ {t('add_custom_baud')}")
+        self._baud_edit_index = self.cb_baud_rate.count()
+        self.cb_baud_rate.addItem(f"✏️ {t('edit_custom_baud')}")
+
+        # Restore previous selection.
+        idx = self.cb_baud_rate.findText(current_text)
+        if idx >= 0:
+            self.cb_baud_rate.setCurrentIndex(idx)
+        else:
+            # Try without ★ prefix (in case list was rebuilt).
+            clean = current_text.replace("★ ", "")
+            idx = self.cb_baud_rate.findText(clean)
+            if idx >= 0:
+                self.cb_baud_rate.setCurrentIndex(idx)
+            else:
+                self.cb_baud_rate.setCurrentIndex(12)  # Default: 115200
+
+        self.cb_baud_rate.blockSignals(False)
+
+    def _on_baud_rate_activated(self, index: int) -> None:
+        """Handle baud rate combo box selection.
+
+        Intercepts clicks on special action items (add/edit) and
+        prevents them from being selected as baud rate values.
+
+        Args:
+            index: The activated index.
+        """
+        text = self.cb_baud_rate.currentText()
+
+        if index == self._baud_add_index or text.startswith("➕"):
+            self._add_custom_baud()
+        elif index == self._baud_edit_index or text.startswith("✏️"):
+            self._manage_custom_bauds()
+        # else: normal baud rate selection, do nothing extra.
+
+    def _add_custom_baud(self) -> None:
+        """Show dialog to add a custom baud rate value."""
+        from PySide6.QtWidgets import QInputDialog
+
+        value, ok = QInputDialog.getInt(
+            self,
+            t("custom_baud_title"),
+            t("custom_baud_label"),
+            230400,  # default
+            1,       # min
+            10000000,  # max
+        )
+
+        if not ok:
+            return
+
+        baud_str = str(value)
+
+        # Check duplicates (preset + custom).
+        if baud_str in self._DEFAULT_BAUDS or baud_str in self._custom_bauds:
+            QMessageBox.warning(self, t("warning"), t("custom_baud_exists"))
+            return
+
+        # Add to custom list and rebuild.
+        self._custom_bauds.append(baud_str)
+        self._build_baud_rate_list()
+
+        # Select the newly added item.
+        idx = self.cb_baud_rate.findText(f"★ {baud_str}")
+        if idx >= 0:
+            self.cb_baud_rate.setCurrentIndex(idx)
+
+    def _manage_custom_bauds(self) -> None:
+        """Show dialog to manage (delete) custom baud rates."""
+        if not self._custom_bauds:
+            return
+
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("custom_baud_manage"))
+        dialog.setMinimumWidth(300)
+        layout = QVBoxLayout(dialog)
+
+        list_widget = QListWidget()
+        for baud in self._custom_bauds:
+            list_widget.addItem(f"★ {baud}")
+        layout.addWidget(list_widget)
+
+        btn_layout = QHBoxLayout()
+        btn_delete = QPushButton(t("delete"))
+        btn_delete.setProperty("danger", True)
+        btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        def _delete_selected() -> None:
+            row = list_widget.currentRow()
+            if row >= 0:
+                removed = self._custom_bauds.pop(row)
+                list_widget.takeItem(row)
+
+        btn_delete.clicked.connect(_delete_selected)
+        btn_layout.addWidget(btn_delete)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        btn_box.rejected.connect(dialog.accept)
+        layout.addWidget(btn_box)
+
+        dialog.exec()
+
+        # Rebuild combo box with updated custom list.
+        self._build_baud_rate_list()
 
     def _check_port_status(self) -> None:
         """Periodic check for port status (fallback hot-plug detection)."""

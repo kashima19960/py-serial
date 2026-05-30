@@ -233,6 +233,38 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         LANG_ZH: "波特率",
         LANG_EN: "Baud Rate",
     },
+    "add_custom_baud": {
+        LANG_ZH: "添加自定义波特率...",
+        LANG_EN: "Add Custom Baud Rate...",
+    },
+    "edit_custom_baud": {
+        LANG_ZH: "编辑自定义波特率...",
+        LANG_EN: "Edit Custom Baud Rates...",
+    },
+    "custom_baud_title": {
+        LANG_ZH: "添加自定义波特率",
+        LANG_EN: "Add Custom Baud Rate",
+    },
+    "custom_baud_label": {
+        LANG_ZH: "波特率值:",
+        LANG_EN: "Baud Rate Value:",
+    },
+    "custom_baud_invalid": {
+        LANG_ZH: "请输入有效的正整数",
+        LANG_EN: "Please enter a valid positive integer",
+    },
+    "custom_baud_exists": {
+        LANG_ZH: "该波特率已存在",
+        LANG_EN: "This baud rate already exists",
+    },
+    "custom_baud_manage": {
+        LANG_ZH: "管理自定义波特率",
+        LANG_EN: "Manage Custom Baud Rates",
+    },
+    "delete": {
+        LANG_ZH: "删除",
+        LANG_EN: "Delete",
+    },
     "data_bits": {
         LANG_ZH: "数据位",
         LANG_EN: "Data Bits",
@@ -318,6 +350,10 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "send_btn": {
         LANG_ZH: "发送",
         LANG_EN: "Send",
+    },
+    "append_crlf": {
+        LANG_ZH: "加回车换行",
+        LANG_EN: "Append CR+LF",
     },
     
     # Status
