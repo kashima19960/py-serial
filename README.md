@@ -1,94 +1,202 @@
-# Serial Assistant (PySide6 Edition)
+# 串口助手
 
-A modern, lightweight serial debugging tool built with PySide6.
-Ported from the Jiangxie Technology C# WinForms Serial Assistant.
+> 一个基于 PySide6 (Qt6) 的现代化轻量串口调试工具。
+> 移植自 C# WinForms 版本，采用 Python 重构并大幅增强功能。
 
-## Project Structure
+[English Version](README_EN.md)
+
+---
+
+## 目录
+
+- [功能特性](#功能特性)
+- [界面预览](#界面预览)
+- [快速开始](#快速开始)
+- [项目结构](#项目结构)
+- [技术栈](#技术栈)
+- [移植对照](#移植对照)
+- [版本历史](#版本历史)
+
+---
+
+## 功能特性
+
+### 串口通信
+
+| 功能 | 说明 |
+|------|------|
+| 自动扫描串口 | 打开下拉框时自动刷新可用端口列表 |
+| 参数可配置 | 波特率、数据位、停止位、校验位 |
+| 自定义波特率 | 支持添加、编辑、删除自定义波特率值 |
+| 串口参数预设 | 保存/加载常用串口参数组合，一键切换 |
+| 多线程接收 | QThread + Signal，接收不阻塞 UI |
+| USB 热插拔检测 | Windows 原生事件监听 + 定时器备选 |
+
+### 数据收发
+
+| 功能 | 说明 |
+|------|------|
+| HEX / 文本模式 | 接收和发送独立切换 HEX 或文本模式 |
+| GBK / UTF-8 编码 | 多字节编码支持，增量解码处理分包问题 |
+| 加回车换行 | 发送时可选自动追加 CR+LF |
+| 时间戳显示 | 接收区每行数据前显示 `[HH:MM:SS]` 时间戳 |
+
+### 搜索与过滤
+
+| 功能 | 说明 |
+|------|------|
+| 实时搜索 | 接收区工具栏搜索框，支持关键字高亮 |
+| 过滤模式 | 仅显示匹配行，隐藏无关数据 |
+| 正则表达式 | 支持正则模式进行高级匹配 |
+
+### 数据日志
+
+| 功能 | 说明 |
+|------|------|
+| 日志录制 | 将收发数据录制到文件（Ctrl+R） |
+| 导出 TXT | 将接收区内容导出为文本文件（Ctrl+S） |
+| 带时间戳记录 | 日志文件自动记录精确到秒的时间戳 |
+
+### 统计与状态
+
+| 功能 | 说明 |
+|------|------|
+| RX/TX 字节计数 | 状态栏实时显示收发字节数（自动 B/KB/MB 换算） |
+| RX/TX 速率 | 状态栏实时显示收发吞吐速率（B/s、KB/s） |
+| 端口状态指示 | 彩色徽章显示已连接/未连接/错误状态 |
+| 录制指示 | 状态栏显示当前是否正在录制日志 |
+
+### 界面与交互
+
+| 功能 | 说明 |
+|------|------|
+| 标准菜单栏 | 文件/编辑/视图/帮助，完整快捷键支持 |
+| 中英文切换 | 实时切换中文/English，全 UI 文本动态更新 |
+| 字体切换 | 视图菜单可选系统任意字体和字号 |
+| 始终置顶 | 窗口置顶模式（Ctrl+T） |
+| 现代主题 | 浅色专业风格，圆角卡片，蓝色主色调 |
+
+---
+
+## 界面预览
 
 ```
-py-serial/
-├── main.py                 # Application entry point
-├── build.py                # Nuitka build script
-├── README.md               # Project documentation
-├── requirements.txt        # Python dependencies
-├── core/                   # Core functionality modules
-│   ├── __init__.py
-│   ├── serial_worker.py    # Serial port worker thread
-│   └── encoding_handler.py # Encoding utilities
-└── ui/                     # User interface modules
-    ├── __init__.py
-    ├── main_window.py      # Main application window
-    └── styles.py           # UI theme and styles
+┌─────────────────────────────────────────────────────────────┐
+│  Menu Bar: 文件(F) | 编辑(E) | 视图(V) | 帮助(H)           │
+├───────────────────────────────────────┬─────────────────────┤
+│  接收区工具栏                         │  串口配置            │
+│  [☑时间戳] [☑自动滚动] [🔍搜索框]    │  │ 串口号           ││
+│  ┌────────────────────────────────┐   │  │ 波特率           ││
+│  │ 接收区                          │   │  │ 数据位           ││
+│  │ [14:32:05] AA BB CC            │   │  │ 停止位           ││
+│  │ [14:32:06] DE F0               │   │  │ 校验位           ││
+│  └────────────────────────────────┘   │  │ [打开串口]        ││
+│  [清空]                               │  │ 状态指示           ││
+│                                       │  │ 参数预设 ▼ [保存] ││
+│  发送区                                │                    ││
+│  ┌────────────────────────────────┐   │  收发设置            ││
+│  │ 发送输入框                       │   │  │ 接收模式/编码     ││
+│  └────────────────────────────────┘   │  │ 发送模式/编码     ││
+│  [☑加回车换行] [清空] [发送]          │                    ││
+├───────────────────────────────────────┴─────────────────────┤
+│  状态栏: [COM3@115200] [RX:1.2KB] [TX:345B] [512B/s] [●REC]│
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Tech Stack
+---
 
-- **Language:** Python 3.8+
-- **GUI Framework:** PySide6 (Qt6)
-- **Serial Library:** pyserial
-- **Build Tool:** Nuitka
+## 快速开始
 
-## Features
-
-### User Interface
-
-- Modern light theme with clean, professional design
-- Left-right split layout: receive/send areas on left, configuration on right
-- Responsive and accessible interface
-
-### Serial Port Functions
-
-- ✅ Auto-scan available serial ports (refresh on dropdown)
-- ✅ Configurable: baud rate, data bits, stop bits, parity
-- ✅ Multi-threaded reception (QThread + Signal)
-- ✅ USB hot-plug detection
-
-### Data Processing
-
-- ✅ HEX/Text mode switching (receive/send)
-- ✅ GBK/UTF-8 encoding support
-- ✅ Incremental decoder for handling packet fragmentation
-
-## Quick Start
-
-### Running the Application
+### 运行应用
 
 ```bash
+pip install -r requirements.txt
 python main.py
 ```
 
-### Building Executable
+### 编译可执行文件
 
 ```bash
 python build.py
 ```
 
-Or manually:
+或手动编译：
 
 ```bash
 python -m nuitka --standalone --onefile --enable-plugin=pyside6 \
     --windows-disable-console main.py
 ```
 
-### Installing Dependencies
+### 运行测试
 
 ```bash
-pip install -r requirements.txt
+python -m unittest discover tests -v
 ```
 
-## Implementation Notes
+---
 
-| C# Original                | Python Implementation        |
-| -------------------------- | ---------------------------- |
-| `SerialPort` class         | `pyserial` library           |
-| `DataReceived` event       | `QThread` + `Signal`         |
-| `DefWndProc` message       | `nativeEvent` + timer        |
-| `BytesToText` fragmentation| `codecs.IncrementalDecoder`  |
-| `TableLayoutPanel` layout  | `QGridLayout` + `QHBoxLayout`|
+## 项目结构
 
-## Version History
+```
+py-serial/
+├── main.py                      # 应用入口
+├── build.py                     # Nuitka 编译脚本
+├── README.md                    # 中文文档
+├── README_EN.md                 # 英文文档
+├── requirements.txt             # 依赖清单
+├── core/                        # 核心功能模块
+│   ├── __init__.py
+│   ├── serial_worker.py         # 串口工作线程
+│   ├── encoding_handler.py      # 编码处理工具
+│   ├── data_logger.py           # 数据日志录制与导出
+│   └── config_manager.py        # 配置管理器
+├── ui/                          # 用户界面模块
+│   ├── __init__.py
+│   ├── main_window.py           # 主窗口
+│   ├── styles.py                # 主题样式
+│   └── i18n.py                  # 国际化
+└── tests/                       # 单元测试
+    └── test_data_logger.py      # 数据日志测试
+```
 
-- **v1.2.0** - Modern UI redesign with light theme
-- **v1.1.0** - PySide6 port from PyQt5
-- **v1.0.0** - Initial Python port from C#
+---
+
+## 技术栈
+
+| 项目 | 技术 |
+|------|------|
+| 语言 | Python 3.8+ |
+| GUI 框架 | PySide6 (Qt6) |
+| 串口库 | pyserial |
+| 编译工具 | Nuitka |
+
+---
+
+## 移植对照
+
+| C# 原版 | Python 实现 |
+|---------|-------------|
+| `SerialPort` 类 | `pyserial` 库 |
+| `DataReceived` 事件 | `QThread` + `Signal` |
+| `DefWndProc` 消息 | `nativeEvent` + `QTimer` |
+| `BytesToText` 分片 | `codecs.IncrementalDecoder` |
+| `TableLayoutPanel` 布局 | `QGridLayout` + `QHBoxLayout` |
+| `Timer` 组件 | `QTimer` |
+
+---
+
+## 版本历史
+
+| 版本 | 日期 | 更新内容 |
+|------|------|----------|
+| v2.0 | 2026-05 | 数据日志录制与导出、接收区搜索过滤、时间戳显示、自定义波特率管理、串口参数预设、RX/TX 速率统计、加回车换行、字体切换、标准菜单栏、中英文国际化 |
+| v1.2 | 2024 | 现代 UI 重设计，浅色主题 |
+| v1.1 | 2024 | 从 PyQt5 移植到 PySide6 |
+| v1.0 | 2024 | 初始 Python 版本，移植自 C# |
+
+---
+
+## 许可证
+
+Apache License 2.0
 
