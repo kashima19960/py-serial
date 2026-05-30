@@ -420,6 +420,66 @@ def get_stylesheet() -> str:
         padding: 4px 8px;
     }}
 
+    QLabel#status_field {{
+        color: {Colors.TEXT_SECONDARY};
+        font-size: 12px;
+        padding: 0 12px;
+        border-right: 1px solid {Colors.BORDER};
+    }}
+
+    QLabel#status_rec {{
+        color: {Colors.DANGER};
+        font-size: 12px;
+        font-weight: 600;
+        padding: 0 12px;
+    }}
+
+    /* ===== Check Box (Toolbar) ===== */
+    QCheckBox {{
+        spacing: 4px;
+        color: {Colors.TEXT_SECONDARY};
+        font-size: 12px;
+    }}
+
+    QCheckBox::indicator {{
+        width: 14px;
+        height: 14px;
+        border: 1px solid {Colors.BORDER};
+        border-radius: 3px;
+        background-color: {Colors.SURFACE};
+    }}
+
+    QCheckBox::indicator:hover {{
+        border-color: {Colors.SECONDARY};
+    }}
+
+    QCheckBox::indicator:checked {{
+        background-color: {Colors.PRIMARY};
+        border-color: {Colors.PRIMARY};
+    }}
+
+    /* ===== Search Bar ===== */
+    QLineEdit {{
+        background-color: {Colors.SURFACE};
+        border: 1px solid {Colors.BORDER};
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+        selection-background-color: {Colors.PRIMARY};
+        selection-color: {Colors.TEXT_ON_PRIMARY};
+    }}
+
+    QLineEdit:focus {{
+        border: 1px solid {Colors.BORDER_FOCUS};
+    }}
+
+    /* ===== Match Count Label ===== */
+    QLabel#match_count {{
+        color: {Colors.TEXT_MUTED};
+        font-size: 11px;
+        min-width: 30px;
+    }}
+
     /* ===== Message Box ===== */
     QMessageBox {{
         background-color: {Colors.SURFACE};

@@ -20,16 +20,30 @@ for the Serial Assistant application.
 """
 
 import ctypes
-from typing import Optional, Tuple
+import re
+from datetime import datetime
+from typing import List, Optional, Tuple
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QFont, QTextCursor
+from PySide6.QtCore import QRegularExpression, Qt, QTimer
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QColor,
+    QFont,
+    QFontDatabase,
+    QTextCharFormat,
+    QTextCursor,
+    QTextDocument,
+)
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QFileDialog,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -39,6 +53,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.data_logger import DataLogger
 from core.encoding_handler import (
     EncodingHandler,
     bytes_to_hex,
@@ -46,7 +61,7 @@ from core.encoding_handler import (
     text_to_bytes,
 )
 from core.serial_worker import SerialWorker, get_available_ports
-from ui.styles import get_stylesheet
+from ui.styles import Colors, get_stylesheet
 from ui.i18n import I18n, t, LANG_ZH, LANG_EN
 
 
@@ -90,6 +105,27 @@ class MainWindow(QMainWindow):
         
         # Port open state for language switching.
         self._is_port_open = False
+
+        # Data logger.
+        self._data_logger = DataLogger()
+
+        # Timestamp and display options.
+        self._show_timestamp = False
+        self._auto_scroll = True
+
+        # Byte counters.
+        self._rx_byte_count = 0
+        self._tx_byte_count = 0
+
+        # Search / filter state.
+        self._raw_receive_lines: List[str] = [""]
+        self._search_matches: list = []
+        self._current_match_index = -1
+
+        # Font state.
+        self._current_font_family = "Consolas"
+        self._current_font_size = 10
+        self._mono_only = True
 
         # Build UI.
         self._init_ui()
@@ -138,7 +174,53 @@ class MainWindow(QMainWindow):
 
         # Configure status bar.
         self.statusBar().setSizeGripEnabled(False)
+        self._init_status_bar()
+
+    def _init_status_bar(self) -> None:
+        """Initialize permanent status bar widgets."""
+        self.lbl_status_port = QLabel()
+        self.lbl_status_port.setObjectName("status_field")
+        self.statusBar().addPermanentWidget(self.lbl_status_port)
+
+        self.lbl_status_rx = QLabel(t("status_rx", count="0 B"))
+        self.lbl_status_rx.setObjectName("status_field")
+        self.statusBar().addPermanentWidget(self.lbl_status_rx)
+
+        self.lbl_status_tx = QLabel(t("status_tx", count="0 B"))
+        self.lbl_status_tx.setObjectName("status_field")
+        self.statusBar().addPermanentWidget(self.lbl_status_tx)
+
+        self.lbl_status_rec = QLabel(t("status_recording"))
+        self.lbl_status_rec.setObjectName("status_rec")
+        self.lbl_status_rec.setVisible(False)
+        self.statusBar().addPermanentWidget(self.lbl_status_rec)
+
         self.statusBar().showMessage(t("ready"))
+
+    def _update_status_counters(self) -> None:
+        """Update the RX/TX byte count labels in the status bar."""
+        self.lbl_status_rx.setText(
+            t("status_rx", count=self._format_bytes(self._rx_byte_count))
+        )
+        self.lbl_status_tx.setText(
+            t("status_tx", count=self._format_bytes(self._tx_byte_count))
+        )
+
+    @staticmethod
+    def _format_bytes(count: int) -> str:
+        """Format a byte count into a human-readable string.
+
+        Args:
+            count: Number of bytes.
+
+        Returns:
+            Formatted string like "1.2 KB" or "345 B".
+        """
+        if count < 1024:
+            return f"{count} B"
+        if count < 1024 * 1024:
+            return f"{count / 1024:.1f} KB"
+        return f"{count / (1024 * 1024):.1f} MB"
 
     def _create_menu_bar(self) -> None:
         """Create the application menu bar with standard menus."""
@@ -165,6 +247,21 @@ class MainWindow(QMainWindow):
         self.act_exit.triggered.connect(self.close)
         self.menu_file.addAction(self.act_exit)
 
+        self.menu_file.addSeparator()
+
+        # Recording toggle.
+        self.act_record = QAction(t("record_log"), self)
+        self.act_record.setCheckable(True)
+        self.act_record.setShortcut("Ctrl+R")
+        self.act_record.triggered.connect(self._on_record_toggled)
+        self.menu_file.addAction(self.act_record)
+
+        # Export submenu.
+        self.act_export_txt = QAction(t("export_txt"), self)
+        self.act_export_txt.setShortcut("Ctrl+S")
+        self.act_export_txt.triggered.connect(self._on_export_txt)
+        self.menu_file.addAction(self.act_export_txt)
+
         # --- Edit Menu ---
         self.menu_edit = menu_bar.addMenu(t("menu_edit"))
 
@@ -177,6 +274,13 @@ class MainWindow(QMainWindow):
         self.act_clear_send.setShortcut("Ctrl+Shift+D")
         self.act_clear_send.triggered.connect(self._on_clear_send)
         self.menu_edit.addAction(self.act_clear_send)
+
+        self.menu_edit.addSeparator()
+
+        self.act_find = QAction(t("find"), self)
+        self.act_find.setShortcut("Ctrl+F")
+        self.act_find.triggered.connect(self._on_find)
+        self.menu_edit.addAction(self.act_find)
 
         # --- View Menu ---
         self.menu_view = menu_bar.addMenu(t("menu_view"))
@@ -205,6 +309,9 @@ class MainWindow(QMainWindow):
         )
         self.menu_language.addAction(self.act_lang_en)
 
+        # Font submenu.
+        self._build_font_submenu()
+
         # --- Help Menu ---
         self.menu_help = menu_bar.addMenu(t("menu_help"))
 
@@ -227,12 +334,56 @@ class MainWindow(QMainWindow):
         self.grp_receive = QGroupBox(t("receive"))
         receive_layout = QVBoxLayout(self.grp_receive)
 
+        # Receive toolbar.
+        receive_toolbar = QHBoxLayout()
+        receive_toolbar.setSpacing(8)
+
+        self.chk_timestamp = QCheckBox(t("show_timestamp"))
+        self.chk_timestamp.setChecked(False)
+        self.chk_timestamp.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chk_timestamp.toggled.connect(self._on_timestamp_toggled)
+        receive_toolbar.addWidget(self.chk_timestamp)
+
+        self.chk_auto_scroll = QCheckBox(t("auto_scroll"))
+        self.chk_auto_scroll.setChecked(True)
+        self.chk_auto_scroll.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chk_auto_scroll.toggled.connect(self._on_auto_scroll_toggled)
+        receive_toolbar.addWidget(self.chk_auto_scroll)
+
+        receive_toolbar.addStretch()
+
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText(t("search_placeholder"))
+        self.search_bar.setMinimumWidth(140)
+        self.search_bar.setMaximumWidth(220)
+        self.search_bar.setClearButtonEnabled(True)
+        self.search_bar.textChanged.connect(self._on_search_text_changed)
+        self.search_bar.returnPressed.connect(self._on_search_next)
+        receive_toolbar.addWidget(self.search_bar)
+
+        self.chk_filter = QCheckBox(t("filter_mode"))
+        self.chk_filter.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chk_filter.toggled.connect(self._on_filter_toggled)
+        receive_toolbar.addWidget(self.chk_filter)
+
+        self.chk_regex = QCheckBox(t("regex_mode"))
+        self.chk_regex.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chk_regex.toggled.connect(self._on_regex_toggled)
+        receive_toolbar.addWidget(self.chk_regex)
+
+        self.lbl_match_count = QLabel("")
+        self.lbl_match_count.setObjectName("match_count")
+        receive_toolbar.addWidget(self.lbl_match_count)
+
+        receive_layout.addLayout(receive_toolbar)
+
         self.tb_receive = QTextEdit()
         self.tb_receive.setReadOnly(True)
         self.tb_receive.setFont(QFont("Consolas", 10))
         self.tb_receive.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.tb_receive.setAcceptRichText(False)
         self.tb_receive.setPlaceholderText(t("waiting_data"))
+        self.tb_receive.document().setMaximumBlockCount(10000)
         receive_layout.addWidget(self.tb_receive, 1)
 
         # Receive area buttons.
@@ -517,9 +668,11 @@ class MainWindow(QMainWindow):
             self.btn_send.setEnabled(True)
             self._set_config_enabled(False)
             self._set_status_badge("open", t("connected"))
-            self.statusBar().showMessage(
-                t("connected_to", port=self.cb_port_name.currentText())
+            port_info = (
+                f"{self.cb_port_name.currentText()} @ "
+                f"{self.cb_baud_rate.currentText()}"
             )
+            self.lbl_status_port.setText(port_info)
         else:
             self.btn_open.setText(t("open_port"))
             self.btn_open.setProperty("danger", False)
@@ -527,7 +680,7 @@ class MainWindow(QMainWindow):
             self.btn_send.setEnabled(False)
             self._set_config_enabled(True)
             self._set_status_badge("closed", t("disconnected"))
-            self.statusBar().showMessage(t("not_connected"))
+            self.lbl_status_port.setText("")
 
         # Update menu visibility.
         self._update_menu_port_state()
@@ -630,15 +783,27 @@ class MainWindow(QMainWindow):
         else:
             data = text_to_bytes(text, self._send_encoding)
 
+        self._tx_byte_count += len(data)
+        self._update_status_counters()
+
+        # Log to file.
+        self._data_logger.log("TX", text.rstrip("\n"))
+
         self._serial_worker.write_data(data)
 
     def _on_clear_receive(self) -> None:
         """Clear the receive text area."""
         self.tb_receive.clear()
+        self._raw_receive_lines = [""]
+        self._rx_byte_count = 0
+        self._update_status_counters()
+        self._clear_search_highlight()
 
     def _on_clear_send(self) -> None:
         """Clear the send text area."""
         self.tb_send.clear()
+        self._tx_byte_count = 0
+        self._update_status_counters()
 
     def _on_data_received(self, data: bytes) -> None:
         """Handle received serial data.
@@ -646,15 +811,45 @@ class MainWindow(QMainWindow):
         Args:
             data: Received byte data.
         """
+        self._rx_byte_count += len(data)
+        self._update_status_counters()
+
         if self._receive_mode == "HEX模式":
             text = bytes_to_hex(data)
         else:
             text = self._encoding_handler.decode(data)
 
-        # Append text and scroll to bottom.
-        self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
-        self.tb_receive.insertPlainText(text)
-        self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
+        # Log to file.
+        self._data_logger.log("RX", text.rstrip("\n"))
+
+        # Apply timestamp if enabled.
+        if self._show_timestamp:
+            display_text = DataLogger.format_timestamped(text)
+        else:
+            display_text = text
+
+        # Filter check — append to raw buffer.
+        lines = display_text.split("\n")
+        for line in lines:
+            if line or (lines.index(line) == len(lines) - 1):
+                self._raw_receive_lines.append(line)
+
+        # Apply filter if active.
+        if self.chk_filter.isChecked() and self.search_bar.text():
+            keyword = self.search_bar.text()
+            for line in lines:
+                if line and self._matches_filter(line, keyword):
+                    self.tb_receive.moveCursor(
+                        QTextCursor.MoveOperation.End
+                    )
+                    self.tb_receive.insertPlainText(line + "\n")
+        else:
+            self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
+            self.tb_receive.insertPlainText(display_text)
+
+        # Auto-scroll.
+        if self._auto_scroll:
+            self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
 
     def _on_error(self, message: str) -> None:
         """Handle serial errors.
@@ -801,22 +996,25 @@ class MainWindow(QMainWindow):
         if self._is_port_open:
             self.btn_open.setText(t("close_port"))
             self._set_status_badge("open", t("connected"))
-            self.statusBar().showMessage(
-                t("connected_to", port=self.cb_port_name.currentText())
-            )
         else:
             self.btn_open.setText(t("open_port"))
             self._set_status_badge("closed", t("disconnected"))
-            self.statusBar().showMessage(t("not_connected"))
         
         # Placeholders.
         self.tb_receive.setPlaceholderText(t("waiting_data"))
         self.tb_send.setPlaceholderText(t("enter_data"))
+        self.search_bar.setPlaceholderText(t("search_placeholder"))
         
         # Combo box items.
         self._update_parity_items()
         self._update_receive_mode_items()
         self._update_send_mode_items()
+        
+        # Toolbar checkboxes.
+        self.chk_timestamp.setText(t("show_timestamp"))
+        self.chk_auto_scroll.setText(t("auto_scroll"))
+        self.chk_filter.setText(t("filter_mode"))
+        self.chk_regex.setText(t("regex_mode"))
         
         # Menu bar texts.
         self.menu_file.setTitle(t("menu_file"))
@@ -826,6 +1024,9 @@ class MainWindow(QMainWindow):
         self.act_open_port.setText(t("menu_open_port"))
         self.act_close_port.setText(t("menu_close_port"))
         self.act_exit.setText(t("menu_exit"))
+        self.act_record.setText(t("record_log"))
+        self.act_export_txt.setText(t("export_txt"))
+        self.act_find.setText(t("find"))
         self.act_clear_receive.setText(t("menu_clear_receive"))
         self.act_clear_send.setText(t("menu_clear_send"))
         self.act_always_on_top.setText(t("menu_always_on_top"))
@@ -833,6 +1034,351 @@ class MainWindow(QMainWindow):
         self.act_lang_zh.setText(t("lang_zh"))
         self.act_lang_en.setText(t("lang_en"))
         self.act_about.setText(t("menu_about"))
+        
+        # Status bar counters.
+        self._update_status_counters()
+
+    def _on_timestamp_toggled(self, checked: bool) -> None:
+        """Toggle timestamp display in receive area.
+
+        Args:
+            checked: Whether the checkbox is checked.
+        """
+        self._show_timestamp = checked
+
+    def _on_auto_scroll_toggled(self, checked: bool) -> None:
+        """Toggle auto-scroll in receive area.
+
+        Args:
+            checked: Whether the checkbox is checked.
+        """
+        self._auto_scroll = checked
+
+    def _on_record_toggled(self, checked: bool) -> None:
+        """Toggle log recording.
+
+        Args:
+            checked: Whether the record action is checked.
+        """
+        if checked:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self, t("record_log"), "", "Log Files (*.log);;Text Files (*.txt);;All Files (*)"
+            )
+            if filepath:
+                if self._data_logger.start_recording(filepath):
+                    self.lbl_status_rec.setVisible(True)
+                else:
+                    self.act_record.setChecked(False)
+                    QMessageBox.warning(self, t("warning"), t("open_failed"))
+            else:
+                self.act_record.setChecked(False)
+        else:
+            self._data_logger.stop_recording()
+            self.lbl_status_rec.setVisible(False)
+
+    def _on_export_txt(self) -> None:
+        """Export receive buffer content to a text file."""
+        content = self.tb_receive.toPlainText()
+        if not content:
+            QMessageBox.information(self, t("export_txt"), t("no_data"))
+            return
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, t("export_txt"), "", "Text Files (*.txt);;All Files (*)"
+        )
+        if filepath:
+            if DataLogger.export_txt(filepath, content):
+                self.statusBar().showMessage(t("export_success"), 3000)
+            else:
+                QMessageBox.warning(self, t("warning"), t("open_failed"))
+
+    def _on_find(self) -> None:
+        """Focus the search bar in the receive area."""
+        self.search_bar.setFocus()
+        self.search_bar.selectAll()
+
+    def _on_search_text_changed(self, text: str) -> None:
+        """Handle search text changes — update highlight and match count.
+
+        Args:
+            text: Current search text.
+        """
+        if not text:
+            self._clear_search_highlight()
+            self.lbl_match_count.setText("")
+            return
+
+        self._highlight_matches(text)
+
+    def _on_search_next(self) -> None:
+        """Navigate to the next search match."""
+        if not self._search_matches:
+            return
+        self._current_match_index = (
+            (self._current_match_index + 1) % len(self._search_matches)
+        )
+        self._scroll_to_match(self._current_match_index)
+
+    def _on_filter_toggled(self, checked: bool) -> None:
+        """Toggle filter mode — show only matching lines.
+
+        Args:
+            checked: Whether filter is enabled.
+        """
+        keyword = self.search_bar.text()
+        if checked and keyword:
+            self._apply_filter(keyword)
+        elif not checked:
+            self._restore_from_filter()
+
+    def _on_regex_toggled(self, checked: bool) -> None:
+        """Toggle regex mode and re-run search.
+
+        Args:
+            checked: Whether regex is enabled.
+        """
+        keyword = self.search_bar.text()
+        if keyword:
+            self._highlight_matches(keyword)
+        if self.chk_filter.isChecked() and keyword:
+            self._apply_filter(keyword)
+
+    def _matches_filter(self, line: str, keyword: str) -> bool:
+        """Check if a line matches the filter keyword.
+
+        Args:
+            line: The text line to check.
+            keyword: The search keyword.
+
+        Returns:
+            True if the line matches.
+        """
+        if self.chk_regex.isChecked():
+            try:
+                return bool(re.search(keyword, line))
+            except re.error:
+                return False
+        else:
+            return keyword.lower() in line.lower()
+
+    def _highlight_matches(self, keyword: str) -> None:
+        """Highlight all matches of keyword in the receive area.
+
+        Args:
+            keyword: The text to highlight.
+        """
+        self._clear_search_highlight()
+        self._search_matches = []
+        self._current_match_index = -1
+
+        if not keyword:
+            self.lbl_match_count.setText("")
+            return
+
+        document = self.tb_receive.document()
+        fmt = QTextCharFormat()
+        fmt.setBackground(QColor("#FEF08A"))  # Yellow highlight.
+
+        if self.chk_regex.isChecked():
+            try:
+                regex = QRegularExpression(keyword)
+            except Exception:
+                self.lbl_match_count.setText("0")
+                return
+            cursor = QTextCursor(document)
+            while True:
+                cursor = document.find(regex, cursor)
+                if cursor.isNull():
+                    break
+                selection = QTextEdit.ExtraSelection()
+                selection.cursor = cursor
+                selection.format = fmt
+                self._search_matches.append(selection)
+        else:
+            cursor = QTextCursor(document)
+            while True:
+                cursor = document.find(keyword, cursor, QTextDocument.FindFlag.FindCaseSensitively)
+                if cursor.isNull():
+                    break
+                selection = QTextEdit.ExtraSelection()
+                selection.cursor = cursor
+                selection.format = fmt
+                self._search_matches.append(selection)
+
+        self.tb_receive.setExtraSelections(self._search_matches)
+        count = len(self._search_matches)
+        self.lbl_match_count.setText(str(count) if count > 0 else t("no_match"))
+
+    def _clear_search_highlight(self) -> None:
+        """Clear all search highlights."""
+        self._search_matches = []
+        self._current_match_index = -1
+        self.tb_receive.setExtraSelections([])
+
+    def _scroll_to_match(self, index: int) -> None:
+        """Scroll to a specific match by index.
+
+        Args:
+            index: Index of the match to scroll to.
+        """
+        if 0 <= index < len(self._search_matches):
+            self.tb_receive.setTextCursor(self._search_matches[index].cursor)
+            self.tb_receive.ensureCursorVisible()
+
+    def _apply_filter(self, keyword: str) -> None:
+        """Rebuild receive area showing only matching lines.
+
+        Args:
+            keyword: The filter keyword.
+        """
+        self.tb_receive.clear()
+        for line in self._raw_receive_lines:
+            if line and self._matches_filter(line, keyword):
+                self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
+                self.tb_receive.insertPlainText(line + "\n")
+
+    def _restore_from_filter(self) -> None:
+        """Restore receive area to show all buffered lines."""
+        self.tb_receive.clear()
+        for line in self._raw_receive_lines:
+            self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
+            self.tb_receive.insertPlainText(line + "\n")
+        if self._auto_scroll:
+            self.tb_receive.moveCursor(QTextCursor.MoveOperation.End)
+
+    def _build_font_submenu(self) -> None:
+        """Build the font submenu under the View menu.
+
+        Populates monospace and proportional font groups from
+        QFontDatabase, plus a font-size submenu and a monospace-only toggle.
+        """
+        self.menu_font = self.menu_view.addMenu(t("menu_font"))
+
+        # --- Monospace font group ---
+        self._font_mono_group = QActionGroup(self)
+        self._font_mono_group.setExclusive(True)
+
+        mono_header = QAction(t("font_mono_group"), self)
+        mono_header.setEnabled(False)
+        self.menu_font.addAction(mono_header)
+
+        all_families = QFontDatabase.families()
+        mono_families = [f for f in all_families if QFontDatabase.isFixedPitch(f)]
+        prop_families = [f for f in all_families if not QFontDatabase.isFixedPitch(f)]
+
+        self._font_actions: dict[str, QAction] = {}
+        for family in mono_families[:20]:
+            act = QAction(family, self)
+            act.setCheckable(True)
+            act.setChecked(family == self._current_font_family)
+            act.setActionGroup(self._font_mono_group)
+            act.triggered.connect(
+                lambda checked, f=family: self._on_font_changed(f)
+            )
+            self.menu_font.addAction(act)
+            self._font_actions[family] = act
+
+        # --- Proportional font group ---
+        self.menu_font.addSeparator()
+        self._font_prop_group = QActionGroup(self)
+        self._font_prop_group.setExclusive(True)
+
+        prop_header = QAction(t("font_prop_group"), self)
+        prop_header.setEnabled(False)
+        self.menu_font.addAction(prop_header)
+
+        for family in prop_families[:20]:
+            act = QAction(family, self)
+            act.setCheckable(True)
+            act.setChecked(family == self._current_font_family)
+            act.setActionGroup(self._font_prop_group)
+            act.triggered.connect(
+                lambda checked, f=family: self._on_font_changed(f)
+            )
+            self.menu_font.addAction(act)
+            self._font_actions[family] = act
+
+        # --- Font size submenu ---
+        self.menu_font.addSeparator()
+        self.menu_font_size = self.menu_font.addMenu(t("font_size"))
+
+        self._size_group = QActionGroup(self)
+        self._size_group.setExclusive(True)
+        self._size_actions: dict[int, QAction] = {}
+
+        for size in (8, 9, 10, 11, 12, 14, 16, 18, 20, 24):
+            act = QAction(str(size), self)
+            act.setCheckable(True)
+            act.setChecked(size == self._current_font_size)
+            act.setActionGroup(self._size_group)
+            act.triggered.connect(
+                lambda checked, s=size: self._on_font_size_changed(s)
+            )
+            self.menu_font_size.addAction(act)
+            self._size_actions[size] = act
+
+        # --- Monospace-only toggle ---
+        self.menu_font.addSeparator()
+        self.act_mono_only = QAction(t("mono_only"), self)
+        self.act_mono_only.setCheckable(True)
+        self.act_mono_only.setChecked(self._mono_only)
+        self.act_mono_only.triggered.connect(self._on_mono_only_toggled)
+        self.menu_font.addAction(self.act_mono_only)
+
+    def _on_font_changed(self, family: str) -> None:
+        """Handle font family selection from menu.
+
+        Args:
+            family: The selected font family name.
+        """
+        self._current_font_family = family
+        self._apply_editor_font()
+        # Update check states for both groups.
+        for fam, act in self._font_actions.items():
+            act.setChecked(fam == family)
+
+    def _on_font_size_changed(self, size: int) -> None:
+        """Handle font size selection from menu.
+
+        Args:
+            size: The selected font size.
+        """
+        self._current_font_size = size
+        self._apply_editor_font()
+        for s, act in self._size_actions.items():
+            act.setChecked(s == size)
+
+    def _on_mono_only_toggled(self, checked: bool) -> None:
+        """Toggle monospace-only filter for font list.
+
+        Args:
+            checked: Whether the action is checked.
+        """
+        self._mono_only = checked
+        # Rebuild font submenu with filter applied.
+        self._rebuild_font_list()
+
+    def _rebuild_font_list(self) -> None:
+        """Rebuild font list items based on mono_only filter."""
+        all_families = QFontDatabase.families()
+        mono_families = [f for f in all_families if QFontDatabase.isFixedPitch(f)]
+        prop_families = [f for f in all_families if not QFontDatabase.isFixedPitch(f)]
+
+        # Update mono group visibility.
+        for family in mono_families[:20]:
+            if family in self._font_actions:
+                self._font_actions[family].setVisible(True)
+
+        # Update proportional group visibility.
+        for family in prop_families[:20]:
+            if family in self._font_actions:
+                self._font_actions[family].setVisible(not self._mono_only)
+
+    def _apply_editor_font(self) -> None:
+        """Apply the current font settings to receive and send editors."""
+        font = QFont(self._current_font_family, self._current_font_size)
+        self.tb_receive.setFont(font)
+        self.tb_send.setFont(font)
 
     def _check_port_status(self) -> None:
         """Periodic check for port status (fallback hot-plug detection)."""
@@ -875,5 +1421,7 @@ class MainWindow(QMainWindow):
 
         if self._serial_worker.is_open:
             self._serial_worker.close_port()
+
+        self._data_logger.close()
 
         event.accept()

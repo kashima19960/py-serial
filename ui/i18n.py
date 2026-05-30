@@ -131,6 +131,98 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         LANG_ZH: "串口助手 v1.2\n一个简洁实用的串口调试工具。",
         LANG_EN: "Serial Assistant v1.2\nA simple and practical serial debugging tool.",
     },
+
+    # Menu Bar - Recording & Export
+    "record_log": {
+        LANG_ZH: "录制日志",
+        LANG_EN: "Record Log",
+    },
+    "stop_record": {
+        LANG_ZH: "停止录制",
+        LANG_EN: "Stop Recording",
+    },
+    "export_txt": {
+        LANG_ZH: "导出为TXT",
+        LANG_EN: "Export as TXT",
+    },
+    "export_success": {
+        LANG_ZH: "导出成功",
+        LANG_EN: "Export successful",
+    },
+    "recording": {
+        LANG_ZH: "● 录制中",
+        LANG_EN: "● Recording",
+    },
+    "no_data": {
+        LANG_ZH: "没有数据可导出",
+        LANG_EN: "No data to export",
+    },
+    "find": {
+        LANG_ZH: "查找",
+        LANG_EN: "Find",
+    },
+
+    # Toolbar
+    "show_timestamp": {
+        LANG_ZH: "时间戳",
+        LANG_EN: "Timestamp",
+    },
+    "auto_scroll": {
+        LANG_ZH: "自动滚动",
+        LANG_EN: "Auto Scroll",
+    },
+    "search_placeholder": {
+        LANG_ZH: "搜索...",
+        LANG_EN: "Search...",
+    },
+    "filter_mode": {
+        LANG_ZH: "过滤",
+        LANG_EN: "Filter",
+    },
+    "regex_mode": {
+        LANG_ZH: "正则",
+        LANG_EN: "Regex",
+    },
+    "no_match": {
+        LANG_ZH: "无匹配",
+        LANG_EN: "No match",
+    },
+
+    # Status bar
+    "status_rx": {
+        LANG_ZH: "RX: {count}",
+        LANG_EN: "RX: {count}",
+    },
+    "status_tx": {
+        LANG_ZH: "TX: {count}",
+        LANG_EN: "TX: {count}",
+    },
+    "status_recording": {
+        LANG_ZH: "● 录制中",
+        LANG_EN: "● REC",
+    },
+
+    # Font menu
+    "menu_font": {
+        LANG_ZH: "字体",
+        LANG_EN: "Font",
+    },
+    "font_size": {
+        LANG_ZH: "字号",
+        LANG_EN: "Size",
+    },
+    "mono_only": {
+        LANG_ZH: "等宽字体优先",
+        LANG_EN: "Monospace Only",
+    },
+    "font_mono_group": {
+        LANG_ZH: "等宽字体",
+        LANG_EN: "Monospace",
+    },
+    "font_prop_group": {
+        LANG_ZH: "比例字体",
+        LANG_EN: "Proportional",
+    },
     
     # Labels
     "port": {
