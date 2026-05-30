@@ -84,6 +84,63 @@ def get_stylesheet() -> str:
         font-size: 13px;
     }}
 
+    /* ===== Menu Bar ===== */
+    QMenuBar {{
+        background-color: {Colors.SURFACE};
+        border-bottom: 1px solid {Colors.BORDER};
+        padding: 2px 4px;
+        font-size: 13px;
+    }}
+
+    QMenuBar::item {{
+        background: transparent;
+        padding: 6px 12px;
+        border-radius: 4px;
+        color: {Colors.TEXT_PRIMARY};
+    }}
+
+    QMenuBar::item:selected {{
+        background-color: {Colors.SURFACE_HOVER};
+    }}
+
+    QMenuBar::item:pressed {{
+        background-color: {Colors.BORDER};
+    }}
+
+    /* ===== Menu (Drop-down) ===== */
+    QMenu {{
+        background-color: {Colors.SURFACE};
+        border: 1px solid {Colors.BORDER};
+        border-radius: 8px;
+        padding: 4px;
+    }}
+
+    QMenu::item {{
+        padding: 8px 32px 8px 12px;
+        border-radius: 4px;
+        color: {Colors.TEXT_PRIMARY};
+    }}
+
+    QMenu::item:selected {{
+        background-color: {Colors.SURFACE_HOVER};
+    }}
+
+    QMenu::item:disabled {{
+        color: {Colors.TEXT_MUTED};
+    }}
+
+    QMenu::separator {{
+        height: 1px;
+        background: {Colors.BORDER};
+        margin: 4px 8px;
+    }}
+
+    QMenu::indicator {{
+        width: 16px;
+        height: 16px;
+        margin-left: 8px;
+    }}
+
     /* ===== Group Box ===== */
     QGroupBox {{
         background-color: {Colors.SURFACE};

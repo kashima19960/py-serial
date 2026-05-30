@@ -23,7 +23,7 @@ import ctypes
 from typing import Optional, Tuple
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtGui import QAction, QFont, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QGridLayout,
@@ -110,6 +110,9 @@ class MainWindow(QMainWindow):
         # Apply stylesheet.
         self.setStyleSheet(get_stylesheet())
 
+        # Create menu bar.
+        self._create_menu_bar()
+
         # Create central widget.
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -136,6 +139,78 @@ class MainWindow(QMainWindow):
         # Configure status bar.
         self.statusBar().setSizeGripEnabled(False)
         self.statusBar().showMessage(t("ready"))
+
+    def _create_menu_bar(self) -> None:
+        """Create the application menu bar with standard menus."""
+        menu_bar = self.menuBar()
+
+        # --- File Menu ---
+        self.menu_file = menu_bar.addMenu(t("menu_file"))
+
+        self.act_open_port = QAction(t("menu_open_port"), self)
+        self.act_open_port.setShortcut("Ctrl+O")
+        self.act_open_port.triggered.connect(self._on_open_clicked)
+        self.menu_file.addAction(self.act_open_port)
+
+        self.act_close_port = QAction(t("menu_close_port"), self)
+        self.act_close_port.setShortcut("Ctrl+Shift+O")
+        self.act_close_port.triggered.connect(self._on_open_clicked)
+        self.act_close_port.setVisible(False)
+        self.menu_file.addAction(self.act_close_port)
+
+        self.menu_file.addSeparator()
+
+        self.act_exit = QAction(t("menu_exit"), self)
+        self.act_exit.setShortcut("Ctrl+Q")
+        self.act_exit.triggered.connect(self.close)
+        self.menu_file.addAction(self.act_exit)
+
+        # --- Edit Menu ---
+        self.menu_edit = menu_bar.addMenu(t("menu_edit"))
+
+        self.act_clear_receive = QAction(t("menu_clear_receive"), self)
+        self.act_clear_receive.setShortcut("Ctrl+Shift+C")
+        self.act_clear_receive.triggered.connect(self._on_clear_receive)
+        self.menu_edit.addAction(self.act_clear_receive)
+
+        self.act_clear_send = QAction(t("menu_clear_send"), self)
+        self.act_clear_send.setShortcut("Ctrl+Shift+D")
+        self.act_clear_send.triggered.connect(self._on_clear_send)
+        self.menu_edit.addAction(self.act_clear_send)
+
+        # --- View Menu ---
+        self.menu_view = menu_bar.addMenu(t("menu_view"))
+
+        self.act_always_on_top = QAction(t("menu_always_on_top"), self)
+        self.act_always_on_top.setCheckable(True)
+        self.act_always_on_top.setShortcut("Ctrl+T")
+        self.act_always_on_top.triggered.connect(self._on_always_on_top)
+        self.menu_view.addAction(self.act_always_on_top)
+
+        # Language submenu.
+        self.menu_language = self.menu_view.addMenu(t("menu_language"))
+        self.act_lang_zh = QAction(t("lang_zh"), self)
+        self.act_lang_zh.setCheckable(True)
+        self.act_lang_zh.setChecked(I18n.get_lang() == LANG_ZH)
+        self.act_lang_zh.triggered.connect(
+            lambda checked: self._on_language_menu_changed(LANG_ZH, checked)
+        )
+        self.menu_language.addAction(self.act_lang_zh)
+
+        self.act_lang_en = QAction(t("lang_en"), self)
+        self.act_lang_en.setCheckable(True)
+        self.act_lang_en.setChecked(I18n.get_lang() == LANG_EN)
+        self.act_lang_en.triggered.connect(
+            lambda checked: self._on_language_menu_changed(LANG_EN, checked)
+        )
+        self.menu_language.addAction(self.act_lang_en)
+
+        # --- Help Menu ---
+        self.menu_help = menu_bar.addMenu(t("menu_help"))
+
+        self.act_about = QAction(t("menu_about"), self)
+        self.act_about.triggered.connect(self._on_about)
+        self.menu_help.addAction(self.act_about)
 
     def _create_left_panel(self) -> QWidget:
         """Create the left panel containing receive and send areas.
@@ -220,14 +295,8 @@ class MainWindow(QMainWindow):
         # Serial port configuration.
         layout.addWidget(self._create_port_config_group())
 
-        # Receive configuration.
-        layout.addWidget(self._create_receive_config_group())
-
-        # Send configuration.
-        layout.addWidget(self._create_send_config_group())
-        
-        # Language configuration.
-        layout.addWidget(self._create_language_group())
+        # Send/Receive configuration (merged).
+        layout.addWidget(self._create_send_receive_config_group())
 
         layout.addStretch()
 
@@ -308,89 +377,55 @@ class MainWindow(QMainWindow):
 
         return self.grp_port_config
 
-    def _create_receive_config_group(self) -> QGroupBox:
-        """Create the receive configuration group box.
+    def _create_send_receive_config_group(self) -> QGroupBox:
+        """Create the combined send/receive configuration group box.
 
         Returns:
-            A QGroupBox containing receive settings controls.
+            A QGroupBox containing both receive and send settings.
         """
-        self.grp_receive_config = QGroupBox(t("receive_settings"))
-        layout = QGridLayout(self.grp_receive_config)
+        self.grp_send_receive_config = QGroupBox(t("send_receive_settings"))
+        layout = QGridLayout(self.grp_send_receive_config)
         layout.setSpacing(10)
         layout.setColumnStretch(1, 1)
 
+        row = 0
+
         # Receive mode.
-        self.lbl_receive_mode = QLabel(t("mode"))
-        layout.addWidget(self.lbl_receive_mode, 0, 0)
+        self.lbl_receive_mode = QLabel(t("receive_mode"))
+        layout.addWidget(self.lbl_receive_mode, row, 0)
         self.cb_receive_mode = QComboBox()
         self._update_receive_mode_items()
         self.cb_receive_mode.setMinimumWidth(140)
-        layout.addWidget(self.cb_receive_mode, 0, 1)
+        layout.addWidget(self.cb_receive_mode, row, 1)
+        row += 1
 
         # Receive encoding.
-        self.lbl_receive_encoding = QLabel(t("encoding"))
-        layout.addWidget(self.lbl_receive_encoding, 1, 0)
+        self.lbl_receive_encoding = QLabel(t("receive_encoding"))
+        layout.addWidget(self.lbl_receive_encoding, row, 0)
         self.cb_receive_encoding = QComboBox()
         self.cb_receive_encoding.addItems(["GBK", "UTF-8"])
         self.cb_receive_encoding.setEnabled(False)
-        layout.addWidget(self.cb_receive_encoding, 1, 1)
-
-        return self.grp_receive_config
-
-    def _create_send_config_group(self) -> QGroupBox:
-        """Create the send configuration group box.
-
-        Returns:
-            A QGroupBox containing send settings controls.
-        """
-        self.grp_send_config = QGroupBox(t("send_settings"))
-        layout = QGridLayout(self.grp_send_config)
-        layout.setSpacing(10)
-        layout.setColumnStretch(1, 1)
+        layout.addWidget(self.cb_receive_encoding, row, 1)
+        row += 1
 
         # Send mode.
-        self.lbl_send_mode = QLabel(t("mode"))
-        layout.addWidget(self.lbl_send_mode, 0, 0)
+        self.lbl_send_mode = QLabel(t("send_mode"))
+        layout.addWidget(self.lbl_send_mode, row, 0)
         self.cb_send_mode = QComboBox()
         self._update_send_mode_items()
         self.cb_send_mode.setMinimumWidth(140)
-        layout.addWidget(self.cb_send_mode, 0, 1)
+        layout.addWidget(self.cb_send_mode, row, 1)
+        row += 1
 
         # Send encoding.
-        self.lbl_send_encoding = QLabel(t("encoding"))
-        layout.addWidget(self.lbl_send_encoding, 1, 0)
+        self.lbl_send_encoding = QLabel(t("send_encoding"))
+        layout.addWidget(self.lbl_send_encoding, row, 0)
         self.cb_send_encoding = QComboBox()
         self.cb_send_encoding.addItems(["GBK", "UTF-8"])
         self.cb_send_encoding.setEnabled(False)
-        layout.addWidget(self.cb_send_encoding, 1, 1)
+        layout.addWidget(self.cb_send_encoding, row, 1)
 
-        return self.grp_send_config
-    
-    def _create_language_group(self) -> QGroupBox:
-        """Create the language configuration group box.
-
-        Returns:
-            A QGroupBox containing language selection control.
-        """
-        self.grp_language = QGroupBox(t("language"))
-        layout = QGridLayout(self.grp_language)
-        layout.setSpacing(10)
-        layout.setColumnStretch(1, 1)
-
-        # Language selection.
-        self.lbl_language = QLabel(t("language"))
-        layout.addWidget(self.lbl_language, 0, 0)
-        self.cb_language = QComboBox()
-        self.cb_language.addItems([t("lang_zh"), t("lang_en")])
-        self.cb_language.setMinimumWidth(140)
-        # Set current language.
-        if I18n.get_lang() == LANG_ZH:
-            self.cb_language.setCurrentIndex(0)
-        else:
-            self.cb_language.setCurrentIndex(1)
-        layout.addWidget(self.cb_language, 0, 1)
-
-        return self.grp_language
+        return self.grp_send_receive_config
     
     def _update_parity_items(self) -> None:
         """Update parity combo box items based on current language."""
@@ -437,9 +472,6 @@ class MainWindow(QMainWindow):
         self.cb_send_encoding.currentIndexChanged.connect(
             self._on_send_encoding_changed
         )
-        
-        # Language change.
-        self.cb_language.currentIndexChanged.connect(self._on_language_changed)
 
     def _init_default_values(self) -> None:
         """Initialize default control values."""
@@ -496,6 +528,9 @@ class MainWindow(QMainWindow):
             self._set_config_enabled(True)
             self._set_status_badge("closed", t("disconnected"))
             self.statusBar().showMessage(t("not_connected"))
+
+        # Update menu visibility.
+        self._update_menu_port_state()
 
         # Force style update.
         self.btn_open.style().unpolish(self.btn_open)
@@ -685,19 +720,52 @@ class MainWindow(QMainWindow):
         del index  # Unused.
         self._send_encoding = self.cb_send_encoding.currentText()
     
-    def _on_language_changed(self, index: int) -> None:
-        """Handle language selection change.
+    def _on_language_menu_changed(self, lang: str, checked: bool) -> None:
+        """Handle language selection from menu.
 
         Args:
-            index: Selected index in the combo box (0=Chinese, 1=English).
+            lang: The selected language code.
+            checked: Whether the menu item is checked.
         """
-        if index == 0:
-            I18n.set_lang(LANG_ZH)
-        else:
-            I18n.set_lang(LANG_EN)
-        
+        if not checked:
+            return
+
+        I18n.set_lang(lang)
+
+        # Update check states.
+        self.act_lang_zh.setChecked(lang == LANG_ZH)
+        self.act_lang_en.setChecked(lang == LANG_EN)
+
+        # Update menu visibility based on port state.
+        self._update_menu_port_state()
+
         # Update all UI texts.
         self._update_ui_texts()
+
+    def _on_always_on_top(self, checked: bool) -> None:
+        """Toggle always-on-top window flag.
+
+        Args:
+            checked: Whether the action is checked.
+        """
+        if checked:
+            self.setWindowFlags(
+                self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint
+            )
+        else:
+            self.setWindowFlags(
+                self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint
+            )
+        self.show()
+
+    def _on_about(self) -> None:
+        """Show the about dialog."""
+        QMessageBox.about(self, t("about_title"), t("about_text"))
+
+    def _update_menu_port_state(self) -> None:
+        """Update menu item visibility based on port open/close state."""
+        self.act_open_port.setVisible(not self._is_port_open)
+        self.act_close_port.setVisible(self._is_port_open)
     
     def _update_ui_texts(self) -> None:
         """Update all UI texts after language change."""
@@ -708,9 +776,7 @@ class MainWindow(QMainWindow):
         self.grp_receive.setTitle(t("receive"))
         self.grp_send.setTitle(t("send"))
         self.grp_port_config.setTitle(t("port_config"))
-        self.grp_receive_config.setTitle(t("receive_settings"))
-        self.grp_send_config.setTitle(t("send_settings"))
-        self.grp_language.setTitle(t("language"))
+        self.grp_send_receive_config.setTitle(t("send_receive_settings"))
         
         # Port config labels.
         self.lbl_port.setText(t("port"))
@@ -720,12 +786,11 @@ class MainWindow(QMainWindow):
         self.lbl_parity.setText(t("parity"))
         self.lbl_action.setText(t("action"))
         
-        # Receive/Send config labels.
-        self.lbl_receive_mode.setText(t("mode"))
-        self.lbl_receive_encoding.setText(t("encoding"))
-        self.lbl_send_mode.setText(t("mode"))
-        self.lbl_send_encoding.setText(t("encoding"))
-        self.lbl_language.setText(t("language"))
+        # Send/Receive config labels.
+        self.lbl_receive_mode.setText(t("receive_mode"))
+        self.lbl_receive_encoding.setText(t("receive_encoding"))
+        self.lbl_send_mode.setText(t("send_mode"))
+        self.lbl_send_encoding.setText(t("send_encoding"))
         
         # Buttons.
         self.btn_clear_receive.setText(t("clear"))
@@ -753,13 +818,21 @@ class MainWindow(QMainWindow):
         self._update_receive_mode_items()
         self._update_send_mode_items()
         
-        # Language combo box (update display names).
-        current_lang_index = self.cb_language.currentIndex()
-        self.cb_language.blockSignals(True)
-        self.cb_language.clear()
-        self.cb_language.addItems([t("lang_zh"), t("lang_en")])
-        self.cb_language.setCurrentIndex(current_lang_index)
-        self.cb_language.blockSignals(False)
+        # Menu bar texts.
+        self.menu_file.setTitle(t("menu_file"))
+        self.menu_edit.setTitle(t("menu_edit"))
+        self.menu_view.setTitle(t("menu_view"))
+        self.menu_help.setTitle(t("menu_help"))
+        self.act_open_port.setText(t("menu_open_port"))
+        self.act_close_port.setText(t("menu_close_port"))
+        self.act_exit.setText(t("menu_exit"))
+        self.act_clear_receive.setText(t("menu_clear_receive"))
+        self.act_clear_send.setText(t("menu_clear_send"))
+        self.act_always_on_top.setText(t("menu_always_on_top"))
+        self.menu_language.setTitle(t("menu_language"))
+        self.act_lang_zh.setText(t("lang_zh"))
+        self.act_lang_en.setText(t("lang_en"))
+        self.act_about.setText(t("menu_about"))
 
     def _check_port_status(self) -> None:
         """Periodic check for port status (fallback hot-plug detection)."""

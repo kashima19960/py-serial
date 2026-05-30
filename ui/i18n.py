@@ -57,6 +57,80 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         LANG_ZH: "发送设置",
         LANG_EN: "Send Settings",
     },
+    "send_receive_settings": {
+        LANG_ZH: "收发设置",
+        LANG_EN: "Send/Receive Settings",
+    },
+
+    # Menu Bar - Top-level Menus
+    "menu_file": {
+        LANG_ZH: "文件(&F)",
+        LANG_EN: "File(&F)",
+    },
+    "menu_edit": {
+        LANG_ZH: "编辑(&E)",
+        LANG_EN: "Edit(&E)",
+    },
+    "menu_view": {
+        LANG_ZH: "视图(&V)",
+        LANG_EN: "View(&V)",
+    },
+    "menu_help": {
+        LANG_ZH: "帮助(&H)",
+        LANG_EN: "Help(&H)",
+    },
+
+    # Menu Bar - File Menu Items
+    "menu_open_port": {
+        LANG_ZH: "打开串口",
+        LANG_EN: "Open Port",
+    },
+    "menu_close_port": {
+        LANG_ZH: "关闭串口",
+        LANG_EN: "Close Port",
+    },
+    "menu_exit": {
+        LANG_ZH: "退出",
+        LANG_EN: "Exit",
+    },
+
+    # Menu Bar - Edit Menu Items
+    "menu_clear_receive": {
+        LANG_ZH: "清空接收区",
+        LANG_EN: "Clear Receive Area",
+    },
+    "menu_clear_send": {
+        LANG_ZH: "清空发送区",
+        LANG_EN: "Clear Send Area",
+    },
+
+    # Menu Bar - View Menu Items
+    "menu_always_on_top": {
+        LANG_ZH: "始终置顶",
+        LANG_EN: "Always on Top",
+    },
+    "menu_encoding": {
+        LANG_ZH: "编码设置",
+        LANG_EN: "Encoding Settings",
+    },
+    "menu_language": {
+        LANG_ZH: "语言",
+        LANG_EN: "Language",
+    },
+
+    # Menu Bar - Help Menu Items
+    "menu_about": {
+        LANG_ZH: "关于",
+        LANG_EN: "About",
+    },
+    "about_title": {
+        LANG_ZH: "关于串口助手",
+        LANG_EN: "About Serial Assistant",
+    },
+    "about_text": {
+        LANG_ZH: "串口助手 v1.2\n一个简洁实用的串口调试工具。",
+        LANG_EN: "Serial Assistant v1.2\nA simple and practical serial debugging tool.",
+    },
     
     # Labels
     "port": {
@@ -94,6 +168,22 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "language": {
         LANG_ZH: "语言",
         LANG_EN: "Language",
+    },
+    "receive_mode": {
+        LANG_ZH: "接收模式",
+        LANG_EN: "RX Mode",
+    },
+    "send_mode": {
+        LANG_ZH: "发送模式",
+        LANG_EN: "TX Mode",
+    },
+    "receive_encoding": {
+        LANG_ZH: "接收编码",
+        LANG_EN: "RX Encoding",
+    },
+    "send_encoding": {
+        LANG_ZH: "发送编码",
+        LANG_EN: "TX Encoding",
     },
     
     # Parity options
